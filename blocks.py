@@ -9,9 +9,27 @@ import torch.nn.functional as F
 
 from timm.models.vision_transformer import Mlp
 
+approx_gelu = lambda: nn.GELU(approximate="tanh")
+
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+
+def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool,
+                  use_kernel: bool):
+    if use_kernel:
+        try:
+            from apex.normalization import FusedLayerNorm
+
+            return FusedLayerNorm(hidden_size,
+                                  elementwise_affine=affine,
+                                  eps=eps)
+        except ImportError:
+            raise RuntimeError(
+                "FusedLayerNorm not available. Please install apex.")
+    else:
+        return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
 
 
 class Attention(nn.Module):
@@ -135,11 +153,9 @@ class MultiHeadCrossAttention(nn.Module):
 class PatchEmbed3D(nn.Module):
     """ #D video to Patch Embedding
     """
-    dynamic_img_pad: torch.jit.Final[bool]
 
     def __init__(
         self,
-        img_size: Optional[int] = 224,
         patch_size: Tuple[int] = (1, 2, 2),
         in_chans: int = 3,
         embed_dim: int = 768,
@@ -149,7 +165,6 @@ class PatchEmbed3D(nn.Module):
     ):
         super().__init__()
         self.patch_size = patch_size
-        self.img_size = img_size
         self.num_patches = 0
         self.flatten = flatten
 
@@ -165,9 +180,9 @@ class PatchEmbed3D(nn.Module):
 
         #TODO(alanxu): padding
 
-        x = self.proj(x)  # NCTHW
+        x = self.proj(x)  # BCTHW
         if self.flatten:
-            x = x.flatten(2).transpose(1, 2)  # NCTHW -> NCS -> NSC
+            x = x.flatten(2).transpose(1, 2)  # BCTHW -> BCN -> BNC
         x = self.norm(x)
         return x
 
@@ -195,14 +210,14 @@ class FinalLayer(nn.Module):
 
 class T2IFinalLayer(nn.Module):
 
-    def __init__(self, hidden_size, patch_size, out_channels, *args,
+    def __init__(self, hidden_size, patch_size_nd, out_channels, *args,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.norm_final = nn.LayerNorm(hidden_size,
                                        elementwise_affine=False,
                                        eps=1e-6)
         self.linear = nn.Linear(hidden_size,
-                                patch_size * patch_size * out_channels,
+                                patch_size_nd * out_channels,
                                 bias=True)
         self.scale_shift_table = nn.Parameter(
             torch.randn(2, hidden_size) / hidden_size**0.5)
@@ -290,18 +305,22 @@ class CaptionEmbedder(nn.Module):
 def get_2d_sincos_pos_embed(embed_dim,
                             grid_size,
                             cls_token=False,
-                            extra_tokens=0):
+                            extra_tokens=0,
+                            scale=1.0):
     """
-    grid_size: int of the grid height and width
+    grid_size: int of the grid_height=grid_width or grid_height, grid_width)
     return:
     pos_embed: [grid_size*grid_size, embed_dim] or [1+grid_size*grid_size, embed_dim] (w/ or w/o cls_token)
     """
-    grid_h = np.arange(grid_size, dtype=np.float32)
-    grid_w = np.arange(grid_size, dtype=np.float32)
+    if not isinstance(grid_size, tuple):
+        grid_size = (grid_size, grid_size)
+
+    grid_h = np.arange(grid_size[0], dtype=np.float32) / scale
+    grid_w = np.arange(grid_size[1], dtype=np.float32) / scale
     grid = np.meshgrid(grid_w, grid_h)  # here w goes first
     grid = np.stack(grid, axis=0)
 
-    grid = grid.reshape([2, 1, grid_size, grid_size])
+    grid = grid.reshape([2, 1, grid_size[0], grid_size[1]])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
     if cls_token and extra_tokens > 0:
         pos_embed = np.concatenate(
@@ -320,6 +339,11 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
 
     emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
     return emb
+
+
+def get_1d_sincos_pos_embed(embed_dim, length, scale=1.0):
+    pos = np.arange(0, length)[..., None] / scale
+    return get_1d_sincos_pos_embed_from_grid(embed_dim, pos)
 
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
