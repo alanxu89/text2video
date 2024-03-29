@@ -87,11 +87,10 @@ def resize_scale(clip, target_size, interpolation_mode):
     H, W = clip.shape[-2:]
     scale = target_size[0] / H
 
-    return torch.nn.functional.interpolate(
-        clip,
-        scale_factor=scale,
-        interpolation_mode=interpolation_mode,
-        align_corners=False)
+    return torch.nn.functional.interpolate(clip,
+                                           scale_factor=scale,
+                                           mode=interpolation_mode,
+                                           align_corners=False)
 
 
 def crop(clip, i, j, h, w):

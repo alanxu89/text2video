@@ -1,5 +1,6 @@
 import csv
 import os
+import random
 
 import numpy as np
 import torch
@@ -7,7 +8,12 @@ import torchvision
 import torchvision.transforms as transforms
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
 
-from video_transforms import ToTensorVideo, RandomHorizontalFlipVideo, UCFCenterCropVideo
+from video_transforms import (
+    ToTensorVideo,
+    RandomHorizontalFlipVideo,
+    UCFCenterCropVideo,
+    TemporalRandomCrop,
+)
 
 
 def get_transforms_video(resolution=256):
@@ -34,8 +40,8 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         # import pandas
         self.samples = []
         with open(csv_path) as f:
-            spamreader = csv.reader(f)
-            for row in spamreader:
+            reader = csv.reader(f)
+            for row in reader:
                 self.samples.append(row)
             print(len(self.samples))
 
@@ -43,22 +49,30 @@ class DatasetFromCSV(torch.utils.data.Dataset):
 
         self.num_frames = num_frames
         self.frame_interval = frame_interval
-        # self.temporal_sample = video_transforms.TemporalRandomCrop(
-        #     num_frames * frame_interval)
-        self.root = root
+        self.num_real_frames = 1 + (num_frames - 1) * frame_interval
+        self.temporal_sample = TemporalRandomCrop(num_frames * frame_interval)
+        # self.root = root
+        self.root = "/home/ubuntu/Documents/webvid/data/videos"
 
     def getitem(self, index):
-        sample = self.samples[index]
-        path = sample[0]
+        video_id, url, duration, page_dir, text = self.samples[index]
         if self.root:
-            path = os.path.join(self.root, path)
-        text = sample[1]
+            path = os.path.join(self.root, page_dir, f"{video_id}.mp4")
 
         vframes, aframes, info = torchvision.io.read_video(
             filename=path, pts_unit="sec", output_format="TCHW")
-        # total_frames = len(vframes)
 
-        video = vframes
+        # Sampling video frames
+        total_frames = len(vframes)
+        start_frame_ind = random.randint(0,
+                                         total_frames - self.num_real_frames)
+        end_frame_ind = start_frame_ind + self.num_real_frames
+        frame_indice = np.arange(start_frame_ind,
+                                 end_frame_ind,
+                                 step=self.frame_interval,
+                                 dtype=int)
+        video = vframes[frame_indice]
+
         video = self.transform(video)  # T C H W
 
         video = video.permute(1, 0, 2, 3)
