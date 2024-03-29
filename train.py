@@ -1,21 +1,24 @@
 import os
 from glob import glob
-from typing import Tuple
+from typing import Tuple, Optional
 from copy import deepcopy
 from collections import OrderedDict
 import logging
+import argparse
 
 from tqdm import tqdm
 
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
 
 from datasets import DatasetFromCSV, get_transforms_video
 from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
 from models import STDiT
 from diffusion import IDDPM
+from config import Config
 
 
 def get_model_numel(model: torch.nn.Module) -> Tuple[int, int]:
@@ -92,18 +95,128 @@ def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
     return tensor
 
 
-def main(cfg):
+def parse_args(training=False):
+    parser = argparse.ArgumentParser()
+
+    # model config
+    parser.add_argument("config", help="model config file path")
+
+    parser.add_argument("--seed", default=42, type=int, help="generation seed")
+    parser.add_argument(
+        "--ckpt-path",
+        type=str,
+        help="path to model ckpt; will overwrite cfg.ckpt_path if specified")
+    parser.add_argument("--batch-size",
+                        default=None,
+                        type=int,
+                        help="batch size")
+
+    # ======================================================
+    # Inference
+    # ======================================================
+
+    if not training:
+        # prompt
+        parser.add_argument("--prompt-path",
+                            default=None,
+                            type=str,
+                            help="path to prompt txt file")
+        parser.add_argument("--save-dir",
+                            default=None,
+                            type=str,
+                            help="path to save generated samples")
+
+        # hyperparameters
+        parser.add_argument("--num-sampling-steps",
+                            default=None,
+                            type=int,
+                            help="sampling steps")
+        parser.add_argument("--cfg-scale",
+                            default=None,
+                            type=float,
+                            help="balance between cond & uncond")
+    else:
+        parser.add_argument("--wandb",
+                            default=None,
+                            type=bool,
+                            help="enable wandb")
+        parser.add_argument("--load",
+                            default=None,
+                            type=str,
+                            help="path to continue training")
+        parser.add_argument("--data-path",
+                            default=None,
+                            type=str,
+                            help="path to data csv")
+
+    return parser.parse_args()
+
+
+def to_torch_dtype(dtype):
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    elif isinstance(dtype, str):
+        dtype_mapping = {
+            "float64": torch.float64,
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "fp32": torch.float32,
+            "fp16": torch.float16,
+            "half": torch.float16,
+            "bf16": torch.bfloat16,
+        }
+        if dtype not in dtype_mapping:
+            raise ValueError
+        dtype = dtype_mapping[dtype]
+        return dtype
+    else:
+        raise ValueError
+
+
+class StatefulDistributedSampler(DistributedSampler):
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        shuffle: bool = True,
+        seed: int = 0,
+        drop_last: bool = False,
+    ) -> None:
+        super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
+        self.start_index: int = 0
+
+    def __iter__(self):
+        iterator = super().__iter__()
+        indices = list(iterator)
+        indices = indices[self.start_index:]
+        return iter(indices)
+
+    def __len__(self) -> int:
+        return self.num_samples - self.start_index
+
+    def set_start_index(self, start_index: int) -> None:
+        self.start_index = start_index
+
+
+def main():
     # create configs
+    cfg = Config()
+
+    dist.init_process_group("nccl")
     rank = dist.get_rank()
+    device = rank % torch.cuda.device_count()
+    torch.manual_seed(cfg.seed)
+    torch.cuda.set_device(device)
+    dtype = to_torch_dtype(cfg.dtype)
 
     # Setup an experiment folder:
     if rank == 0:
-        os.makedirs(cfg.results_dir, exist_ok=True
+        os.makedirs(cfg.outputs, exist_ok=True
                     )  # Make results folder (holds all experiment subfolders)
-        experiment_index = len(glob(f"{cfg.results_dir}/*"))
-        model_string_name = cfg.model.replace(
-            "/", "-")  # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
-        experiment_dir = f"{cfg.results_dir}/{experiment_index:03d}-{model_string_name}"  # Create an experiment folder
+        experiment_index = len(glob(f"{cfg.outputs}/*"))
+        experiment_dir = f"{cfg.outputs}/{experiment_index:03d}"  # Create an experiment folder
         checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(experiment_dir)
@@ -112,13 +225,18 @@ def main(cfg):
         logger = create_logger(None)
 
     # prepare dataset
-    dataset = DatasetFromCSV(cfg.csv_path,
+    dataset = DatasetFromCSV(cfg.data_path,
                              num_frames=16,
-                             frame_interval=4,
-                             transform=get_transforms_video)
+                             frame_interval=8,
+                             transform=get_transforms_video())
+    sampler = StatefulDistributedSampler(dataset,
+                                         num_replicas=dist.get_world_size(),
+                                         rank=dist.get_rank(),
+                                         shuffle=True)
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
+        sampler=sampler,
     )
 
     logger.info(f"Dataset contains {len(dataset):,} videos ({cfg.data_path})")
@@ -127,11 +245,20 @@ def main(cfg):
 
     # model
     vae = VideoAutoEncoderKL("stabilityai/sd-vae-ft-ema")
-    latent_size = vae.get_latent_size(cfg.input_size)
+    input_size = (cfg.num_frames, *cfg.image_size)
+    latent_size = vae.get_latent_size(input_size)
 
     text_encoder = T5Encoder(from_pretrained="DeepFloyd/t5-v1_1-xxl")
 
-    model = STDiT()
+    model = STDiT(
+        input_size=latent_size,
+        in_channels=vae.out_channels,
+        caption_channels=text_encoder.output_dim,
+        model_max_length=text_encoder.model_max_length,
+        depth=12,
+        hidden_size=768,
+        num_heads=12,
+    )
 
     model_numel, model_numel_trainable = get_model_numel(model)
     print(
@@ -177,7 +304,7 @@ def main(cfg):
     #     f"Training for {cfg.epochs} epochs with {num_steps_per_epoch} steps per epoch"
     # )
 
-    dataloader.sampler.set_start_index(sampler_start_idx)
+    # dataloader.sampler.set_start_index(sampler_start_idx)
     # model_sharding(ema)
 
     # 6.2. training loop
@@ -205,9 +332,9 @@ def main(cfg):
                     model_args = text_encoder.encode(y)
 
                 # diffusion
-                t = torch.randint(0,
-                                  scheduler.num_timesteps,
-                                  size=(x.shape[0]),
+                t = torch.randint(low=0,
+                                  high=scheduler.num_timesteps,
+                                  size=(x.shape[0], ),
                                   device=device)
                 loss_dict = scheduler.training_losses(model, x, t, model_args)
                 loss = loss_dict["loss"].mean()
@@ -245,6 +372,9 @@ def main(cfg):
         # the continue epochs are not resumed, so we need to reset the sampler start index and start step
         dataloader.sampler.set_start_index(0)
         start_step = 0
+
+    logger.info("Done!")
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":

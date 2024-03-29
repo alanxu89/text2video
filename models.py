@@ -174,7 +174,7 @@ class STDiT(nn.Module):
         self.pos_embed_temporal = nn.Parameter(self.get_temporal_pos_embed(),
                                                requires_grad=False)
 
-        drop_path = [val.item for val in torch.linspace(0, drop_path, depth)]
+        drop_path = [val.item() for val in torch.linspace(0, drop_path, depth)]
         self.blocks = nn.ModuleList([
             STDiTBlock(
                 hidden_size=hidden_size,
