@@ -15,8 +15,8 @@ class VideoAutoEncoderKL(nn.Module):
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.image_vae = AutoencoderKL.from_pretrained(pretrained_model,
-                                                       torch_dtype=torch.float)
+        self.image_vae = AutoencoderKL.from_pretrained(
+            pretrained_model, torch_dtype=torch.float16)
         self.out_channels = self.image_vae.config.latent_channels
         self.micro_batch_size = micro_batch_size
         self.patch_size = patch_size

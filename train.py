@@ -210,6 +210,7 @@ def main():
     torch.manual_seed(cfg.seed)
     torch.cuda.set_device(device)
     dtype = to_torch_dtype(cfg.dtype)
+    torch.set_default_dtype(dtype)
 
     # Setup an experiment folder:
     if rank == 0:
@@ -226,8 +227,8 @@ def main():
 
     # prepare dataset
     dataset = DatasetFromCSV(cfg.data_path,
-                             num_frames=16,
-                             frame_interval=8,
+                             num_frames=cfg.num_frames,
+                             frame_interval=cfg.frame_interval,
                              transform=get_transforms_video())
     sampler = StatefulDistributedSampler(dataset,
                                          num_replicas=dist.get_world_size(),
@@ -248,16 +249,18 @@ def main():
     input_size = (cfg.num_frames, *cfg.image_size)
     latent_size = vae.get_latent_size(input_size)
 
-    text_encoder = T5Encoder(from_pretrained="DeepFloyd/t5-v1_1-xxl")
+    text_encoder = T5Encoder(from_pretrained="DeepFloyd/t5-v1_1-xxl",
+                             dtype=torch.float16)
 
     model = STDiT(
         input_size=latent_size,
         in_channels=vae.out_channels,
         caption_channels=text_encoder.output_dim,
         model_max_length=text_encoder.model_max_length,
-        depth=12,
-        hidden_size=768,
-        num_heads=12,
+        depth=24,
+        hidden_size=1024,
+        num_heads=16,
+        patch_size=(1, 2, 2),
     )
 
     model_numel, model_numel_trainable = get_model_numel(model)
@@ -266,7 +269,8 @@ def main():
     )
 
     # 4.2. create ema
-    ema = deepcopy(model).to(torch.float32).to(device)
+    ema = deepcopy(model).to(torch.float16).to(
+        device)  # use fp16 for now to save VRAM
     requires_grad(ema, False)
     # ema_shape_dict = record_model_param_shape(ema)
 
@@ -282,7 +286,6 @@ def main():
 
     opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 
-    torch.set_default_dtype(torch.float)
     num_steps_per_epoch = len(dataloader)
     logger.info("Boost model for distributed training")
 
@@ -345,7 +348,7 @@ def main():
                 opt.step()
 
                 # Update EMA
-                update_ema(ema, model.module)
+                update_ema(ema, model, decay=0, sharded=False)
 
                 # Log loss values:
                 all_reduce_mean(loss)
