@@ -9,11 +9,13 @@ import torch.nn.functional as F
 
 from timm.models.vision_transformer import Mlp
 
+import xformers.ops
+
 approx_gelu = lambda: nn.GELU(approximate="tanh")
 
 
 def modulate(x, shift, scale):
-    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+    return x * (1 + scale) + shift
 
 
 def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool,
@@ -130,8 +132,8 @@ class MultiHeadCrossAttention(nn.Module):
     def forward(self, x, c, mask=None):
         B, N, C = x.shape
 
-        q = self.q_linear(x).reshape(B, N, self.num_heads, self.head_dim)
-        kv = self.kv_linear(c).reshape(B, N, 2, self.num_heads, self.head_dim)
+        q = self.q_linear(x).reshape(1, -1, self.num_heads, self.head_dim)
+        kv = self.kv_linear(c).reshape(1, -1, 2, self.num_heads, self.head_dim)
         k, v = kv.unbind(2)
 
         attn_bias = None
@@ -238,7 +240,7 @@ class TimestepEmbedder(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(self.freq_emb_size, hidden_size),
             nn.SiLU(),
-            nn.Linear(hidden_size, self.freq_emb_size),
+            nn.Linear(hidden_size, hidden_size),
         )
 
     @staticmethod
@@ -248,7 +250,10 @@ class TimestepEmbedder(nn.Module):
                           torch.arange(0, half, dtype=torch.float32) / half)
         freqs = freqs.to(device=t.device)
         phases = t[:, None].float() * freqs[None]
-        emb = torch.cat([torch.sin(phases), torch.sin(phases)], dim=1)
+        emb = torch.cat(
+            [torch.sin(phases), torch.sin(phases)], dim=1).to(torch.float16)
+
+        return emb
 
     def forward(self, t):
         t_emb = self.timestep_embedding(t, self.freq_emb_size)
