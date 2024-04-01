@@ -12,7 +12,6 @@ from video_transforms import (
     ToTensorVideo,
     RandomHorizontalFlipVideo,
     UCFCenterCropVideo,
-    TemporalRandomCrop,
 )
 
 
@@ -41,6 +40,7 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         self.samples = []
         with open(csv_path) as f:
             reader = csv.reader(f)
+            next(reader)
             for row in reader:
                 self.samples.append(row)
             print(len(self.samples))
@@ -50,7 +50,6 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         self.num_frames = num_frames
         self.frame_interval = frame_interval
         self.num_real_frames = 1 + (num_frames - 1) * frame_interval
-        self.temporal_sample = TemporalRandomCrop(num_frames * frame_interval)
         # self.root = root
         self.root = "/home/ubuntu/Documents/webvid/data/videos"
 
@@ -75,7 +74,7 @@ class DatasetFromCSV(torch.utils.data.Dataset):
 
         video = self.transform(video)  # T C H W
 
-        video = video.permute(1, 0, 2, 3)
+        video = video.permute(1, 0, 2, 3)  # C T H W, channel first convention
 
         return {"video": video, "text": text}
 

@@ -1,8 +1,8 @@
 class Config:
 
     def __init__(self) -> None:
-        self.num_frames = 16
-        self.frame_interval = 3
+        self.num_frames = 8
+        self.frame_interval = 8
         self.image_size = (256, 256)
 
         # Define dataset
@@ -13,7 +13,7 @@ class Config:
         self.num_workers = 4
 
         # Define acceleration
-        self.dtype = "bf16"
+        self.dtype = "fp16"
         self.grad_checkpoint = True
         self.plugin = "zero2"
         self.sp_size = 1
@@ -28,6 +28,6 @@ class Config:
         self.ckpt_every = 1000
         self.load = None
 
-        self.batch_size = 8
+        self.batch_size = 2
         self.lr = 2e-5
         self.grad_clip = 1.0

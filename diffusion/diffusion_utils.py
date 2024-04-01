@@ -26,7 +26,7 @@ def approx_standard_normal_cdf(x):
     sqrt_pi = np.pi**0.5
     y = sqrt_pi * (0.9 * x + 0.0418198 * x**3 - 0.0004406 * x**5)
 
-    return 1.0 / (1.0 + np.exp(-y))
+    return 1.0 / (1.0 + torch.exp(-y))
 
 
 def continuous_gaussian_log_likelihood(x, *, means, log_scales):
