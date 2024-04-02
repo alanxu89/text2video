@@ -257,10 +257,11 @@ def main():
         in_channels=vae.out_channels,
         caption_channels=text_encoder.output_dim,
         model_max_length=text_encoder.model_max_length,
-        depth=24,
-        hidden_size=1024,
-        num_heads=16,
-        patch_size=(1, 2, 2),
+        depth=cfg.depth,
+        hidden_size=cfg.hidden_size,
+        num_heads=cfg.num_heads,
+        patch_size=cfg.patch_size,
+        enable_grad_checkpoint=cfg.enable_grad_ckpt,
     )
 
     model_numel, model_numel_trainable = get_model_numel(model)

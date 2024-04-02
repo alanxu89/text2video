@@ -1,9 +1,16 @@
 class Config:
 
     def __init__(self) -> None:
-        self.num_frames = 8
+        self.num_frames = 10
         self.frame_interval = 8
         self.image_size = (256, 256)
+
+        self.depth = 24
+        self.hidden_size = 1024
+        self.num_heads = 16
+        self.patch_size = (1, 2, 2)
+
+        self.enable_grad_ckpt = True
 
         # Define dataset
         self.root = None
@@ -28,6 +35,6 @@ class Config:
         self.ckpt_every = 1000
         self.load = None
 
-        self.batch_size = 2
+        self.batch_size = 8
         self.lr = 2e-5
         self.grad_clip = 1.0
