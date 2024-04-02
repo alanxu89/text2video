@@ -1,5 +1,8 @@
+from collections.abc import Iterable
+
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 
 import numpy as np
 
@@ -22,6 +25,31 @@ from blocks import (
     get_2d_sincos_pos_embed,
     get_1d_sincos_pos_embed,
 )
+
+
+def set_grad_checkpoint(model, use_fp32_attention=False, gc_step=1):
+    assert isinstance(model, nn.Module)
+
+    def set_attr(module):
+        module.grad_checkpointing = True
+        module.fp32_attention = use_fp32_attention
+        module.grad_checkpointing_step = gc_step
+
+    model.apply(set_attr)
+
+
+def auto_grad_checkpoint(module, *args, **kwargs):
+    # print("get attr gc", getattr(module, "grad_checkpointing"))
+    # if getattr(module, "grad_checkpointing", False):
+    if not isinstance(module, Iterable):
+        # print("checkpoint function")
+        return checkpoint(module, *args, **kwargs)
+    # gc_step = module[0].grad_checkpointing_step
+    # print("checkpoint sequential")
+    gc_step = 1
+    return checkpoint_sequential(module, gc_step, *args, **kwargs)
+    # print("no checkpoint")
+    # return module(*args, **kwargs)
 
 
 class STDiTBlock(nn.Module):
@@ -133,6 +161,7 @@ class STDiT(nn.Module):
         enable_flashattn=False,
         enable_layernorm_kernel=False,
         enable_sequence_parallelism=False,
+        enable_grad_checkpoint=False,
         *args,
         **kwargs,
     ) -> None:
@@ -193,6 +222,8 @@ class STDiT(nn.Module):
                                          self.patch_size_nd,
                                          out_channels=self.out_channels)
 
+        self.enable_grad_checkpoint = enable_grad_checkpoint
+
     def forward(self, x, t, y, mask=None):
         """
         Args:
@@ -231,7 +262,11 @@ class STDiT(nn.Module):
             y = y.squeeze(1).view(1, -1, y.shape[-1])  # [BxN_token, C]
 
         for block in self.blocks:
-            x = block(x, y, t0, y_lens, self.pos_embed_temporal)
+            if self.enable_grad_checkpoint:
+                x = auto_grad_checkpoint(block, x, y, t0, y_lens,
+                                         self.pos_embed_temporal)
+            else:
+                x = block(x, y, t0, y_lens, self.pos_embed_temporal)
 
         x = self.final_layer(
             x, t)  # [N, num_patches, patch_size_nd * out_channels]
