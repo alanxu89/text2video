@@ -1,6 +1,7 @@
 import csv
 import os
 import random
+import time
 
 import numpy as np
 import torch
@@ -54,6 +55,7 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         self.root = "/home/ubuntu/Documents/webvid/data/videos"
 
     def getitem(self, index):
+        t0 = time.time()
         video_id, url, duration, page_dir, text = self.samples[index]
         if self.root:
             path = os.path.join(self.root, page_dir, f"{video_id}.mp4")
@@ -75,6 +77,7 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         video = self.transform(video)  # T C H W
 
         video = video.permute(1, 0, 2, 3)  # C T H W, channel first convention
+        # print(f"{t0:.3f}, {time.time() - t0:.3f}")
 
         return {"video": video, "text": text}
 

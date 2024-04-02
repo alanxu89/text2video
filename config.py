@@ -1,23 +1,24 @@
 class Config:
 
     def __init__(self) -> None:
-        self.num_frames = 10
+        self.num_frames = 12
         self.frame_interval = 8
         self.image_size = (256, 256)
 
-        self.depth = 24
-        self.hidden_size = 1024
-        self.num_heads = 16
+        self.depth = 12
+        self.hidden_size = 768
+        self.num_heads = 12
         self.patch_size = (1, 2, 2)
 
         self.enable_grad_ckpt = True
+        self.enable_flashattn = True
 
         # Define dataset
         self.root = None
         # self.data_path = "/home/ubuntu/Downloads/data_train_partitions_0000.csv"
         self.data_path = "/home/ubuntu/Downloads/data_train_partitions_0000_4/1.csv"
         self.use_image_transform = False
-        self.num_workers = 4
+        self.num_workers = 8
 
         # Define acceleration
         self.dtype = "fp16"
