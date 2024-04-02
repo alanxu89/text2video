@@ -237,6 +237,7 @@ def main():
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
+        num_workers=cfg.num_workers,
         sampler=sampler,
     )
 
@@ -262,6 +263,7 @@ def main():
         num_heads=cfg.num_heads,
         patch_size=cfg.patch_size,
         enable_grad_checkpoint=cfg.enable_grad_ckpt,
+        enable_flashattn=cfg.enable_flashattn,
     )
 
     model_numel, model_numel_trainable = get_model_numel(model)
@@ -334,6 +336,7 @@ def main():
                 with torch.no_grad():
                     x = vae.encode(x)
                     model_args = text_encoder.encode(y)
+                    # print("input shapes", x.shape, model_args["y"].shape)
 
                 # diffusion
                 t = torch.randint(low=0,
