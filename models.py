@@ -53,6 +53,13 @@ def auto_grad_checkpoint(module, *args, **kwargs):
 
 
 class STDiTBlock(nn.Module):
+    """ similar to DiT Block with adaLN-Zero
+
+    differences:
+        1. spatial and temporal self-attention
+        2. cross attention between x and y (text prompts)
+        3. t goes to adaLN-Zero and y goes to cross attention
+    """
 
     def __init__(
         self,
@@ -65,6 +72,7 @@ class STDiTBlock(nn.Module):
         enable_flashattn=False,
         enable_layernorm_kernel=False,
         enable_sequence_parallelism=False,
+        debug=False,
         *args,
         **kwargs,
     ) -> None:
@@ -72,42 +80,54 @@ class STDiTBlock(nn.Module):
 
         self.hidden_size = hidden_size
         self.enable_flashattn = enable_flashattn
+        self.d_s = d_s
+        self.d_t = d_t
+        self.debug = debug
 
+        # layer norm for self-attention and mlp
         self.norm1 = get_layernorm(hidden_size,
                                    eps=1e-6,
                                    affine=False,
                                    use_kernel=False)
-        self.s_attn = Attention(hidden_size,
-                                num_heads=num_heads,
-                                qkv_bias=True,
-                                enable_flashattn=enable_flashattn)
-
         self.norm2 = get_layernorm(hidden_size,
                                    eps=1e-6,
                                    affine=False,
                                    use_kernel=False)
-        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads)
 
-        self.mlp = Mlp(in_features=hidden_size,
-                       hidden_features=int(hidden_size * mlp_ratio),
-                       act_layer=approx_gelu,
-                       drop=0)
-        self.drop_path = DropPath(
-            drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
-        # why not nn.Linear?
+        # why not nn.Linear with no bias?
+        # scale, shift and gate parameters for self-attention and mlp
         self.scale_shift_table = nn.Parameter(
             torch.randn(6, hidden_size) / hidden_size**0.5)
+        # # DiT
+        # self.adaLN_modulation = nn.Sequential(
+        #     nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
 
         # spatial-temporal attention
-        self.d_s = d_s
-        self.d_t = d_t
-
+        self.s_attn = Attention(hidden_size,
+                                num_heads=num_heads,
+                                qkv_bias=True,
+                                enable_flashattn=enable_flashattn)
         self.t_attn = Attention(hidden_size,
                                 num_heads=num_heads,
                                 qkv_bias=True,
                                 enable_flashattn=enable_flashattn)
 
-    def forward(self, x, c, t, mask=None, tpe=None):
+        # cross attention between x and y(text prompts)
+        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads)
+
+        # mlp for feedforward network
+        self.mlp = Mlp(in_features=hidden_size,
+                       hidden_features=int(hidden_size * mlp_ratio),
+                       act_layer=approx_gelu,
+                       drop=0)
+
+        # a shared drop out for all?
+        self.drop_path = DropPath(
+            drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
+
+    def forward(self, x, y, t, mask=None, tpe=None):
+        if self.debug: print("inside ", self.__class__)
+
         B, N, C = x.shape
 
         # modulation for t
@@ -117,23 +137,41 @@ class STDiTBlock(nn.Module):
         x_m = modulate(self.norm1(x), shift_msa, scale_msa)
 
         # spatial branch
+        if self.debug:
+            print("spatial branch")
+            print(x_m.shape)
         x_s = rearrange(x_m, "b (t s) c -> (b t) s c", t=self.d_t, s=self.d_s)
+        if self.debug: print(x_s.shape)
         x_s = self.s_attn(x_s)
+        if self.debug: print(x_s.shape)
         x_s = rearrange(x_s, "(b t) s c -> b (t s) c", t=self.d_t, s=self.d_s)
+        if self.debug: print(x_s.shape)
         x = x + self.drop_path(gate_msa * x_s)
+        if self.debug: print(x.shape)
 
         # temporal branch
+        if self.debug: print("temporal branch")
+        if self.debug: print(x.shape)
         x_t = rearrange(x, "b (t s) c -> (b s) t c", t=self.d_t, s=self.d_s)
+        if self.debug: print(x_t.shape)
         x_t = self.t_attn(x_t)
+        if self.debug: print(x_t.shape)
         x_t = rearrange(x_t, "(b s) t c -> b (t s) c", t=self.d_t, s=self.d_s)
+        if self.debug: print(x_t.shape)
         x = x + self.drop_path(gate_msa * x_t)
+        if self.debug: print(x.shape)
 
         # cross attention
-        x = x + self.cross_attn(x, c, mask)
+        if self.debug: print("cross attn")
+        if self.debug: print(x.shape)
+        x = x + self.cross_attn(x, y, mask)
+        if self.debug: print(x.shape)
 
         # mlp
+        if self.debug: print("mlp")
         x = x + self.drop_path(
             gate_mlp * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp)))
+        if self.debug: print(x.shape)
 
         return x
 
@@ -162,6 +200,7 @@ class STDiT(nn.Module):
         enable_layernorm_kernel=False,
         enable_sequence_parallelism=False,
         enable_grad_checkpoint=False,
+        debug=False,
         *args,
         **kwargs,
     ) -> None:
@@ -223,6 +262,7 @@ class STDiT(nn.Module):
                                          out_channels=self.out_channels)
 
         self.enable_grad_checkpoint = enable_grad_checkpoint
+        self.debug = debug
 
     def forward(self, x, t, y, mask=None):
         """
@@ -236,20 +276,31 @@ class STDiT(nn.Module):
         """
 
         # x embedding
+        if self.debug: print("inside ", self.__class__)
+        if self.debug: print(x.shape)
         x = self.x_embedder(x)  # [B, Nt*Nh*Nw, C]
-
+        if self.debug: print(x.shape)
         # prepare for spatial
         x = rearrange(x,
                       "B (T S) C -> B T S C",
                       T=self.num_temporal,
                       S=self.num_spatial)
+        if self.debug: print(x.shape)
         x = x + self.pos_embed
         x = rearrange(x, "B T S C -> B (T S) C")
+        if self.debug: print(x.shape)
 
+        if self.debug: print("t shapes")
+        if self.debug: print(t.shape)
         t = self.t_embedder(t)  # [B, C]
+        if self.debug: print(t.shape)
         t0 = self.t_block(t)  #[B, 6*C]
+        if self.debug: print(t0.shape)
 
+        if self.debug: print("y shapes")
+        if self.debug: print(y.shape)
         y = self.y_embedder(y, self.training)  # [B, 1, N_token, C]
+        if self.debug: print(y.shape)
 
         if mask is not None:
             if mask.shape[0] != y.shape[0]:
@@ -260,6 +311,7 @@ class STDiT(nn.Module):
         else:
             y_lens = [y.shape[2]] * y.shape[0]
             y = y.squeeze(1).view(1, -1, y.shape[-1])  # [BxN_token, C]
+        if self.debug: print(y.shape)
 
         for block in self.blocks:
             if self.enable_grad_checkpoint:
