@@ -52,6 +52,21 @@ def auto_grad_checkpoint(module, *args, **kwargs):
     # return module(*args, **kwargs)
 
 
+def debugprint(debug: bool = False):
+    if debug:
+        # print args if debug is true
+        def printfunc(*args):
+            print(*args)
+
+        return printfunc
+    else:
+        # return a function that does nothing
+        def nullfunc(*args):
+            pass
+
+        return nullfunc
+
+
 class STDiTBlock(nn.Module):
     """ similar to DiT Block with adaLN-Zero
 
@@ -82,7 +97,7 @@ class STDiTBlock(nn.Module):
         self.enable_flashattn = enable_flashattn
         self.d_s = d_s
         self.d_t = d_t
-        self.debug = debug
+        self.debugprint = debugprint(debug)
 
         # layer norm for self-attention and mlp
         self.norm1 = get_layernorm(hidden_size,
@@ -126,7 +141,7 @@ class STDiTBlock(nn.Module):
             drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x, y, t, mask=None, tpe=None):
-        if self.debug: print("inside ", self.__class__)
+        self.debugprint("inside ", self.__class__)
 
         B, N, C = x.shape
 
@@ -137,41 +152,42 @@ class STDiTBlock(nn.Module):
         x_m = modulate(self.norm1(x), shift_msa, scale_msa)
 
         # spatial branch
-        if self.debug:
-            print("spatial branch")
-            print(x_m.shape)
+        self.debugprint("spatial branch", x_m.shape)
         x_s = rearrange(x_m, "b (t s) c -> (b t) s c", t=self.d_t, s=self.d_s)
-        if self.debug: print(x_s.shape)
+        self.debugprint(x_s.shape)
         x_s = self.s_attn(x_s)
-        if self.debug: print(x_s.shape)
+        self.debugprint(x_s.shape)
         x_s = rearrange(x_s, "(b t) s c -> b (t s) c", t=self.d_t, s=self.d_s)
-        if self.debug: print(x_s.shape)
+        self.debugprint(x_s.shape)
         x = x + self.drop_path(gate_msa * x_s)
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
 
         # temporal branch
-        if self.debug: print("temporal branch")
-        if self.debug: print(x.shape)
+        self.debugprint("temporal branch")
+        self.debugprint(x.shape)
         x_t = rearrange(x, "b (t s) c -> (b s) t c", t=self.d_t, s=self.d_s)
-        if self.debug: print(x_t.shape)
+        self.debugprint(x_t.shape)
+        if tpe is not None:
+            self.debugprint("tpe shape:", tpe.shape)
+            x_t = x_t + tpe
         x_t = self.t_attn(x_t)
-        if self.debug: print(x_t.shape)
+        self.debugprint(x_t.shape)
         x_t = rearrange(x_t, "(b s) t c -> b (t s) c", t=self.d_t, s=self.d_s)
-        if self.debug: print(x_t.shape)
+        self.debugprint(x_t.shape)
         x = x + self.drop_path(gate_msa * x_t)
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
 
         # cross attention
-        if self.debug: print("cross attn")
-        if self.debug: print(x.shape)
+        self.debugprint("cross attn")
+        self.debugprint(x.shape)
         x = x + self.cross_attn(x, y, mask)
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
 
         # mlp
-        if self.debug: print("mlp")
+        self.debugprint("feed-forward mlp")
         x = x + self.drop_path(
             gate_mlp * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp)))
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
 
         return x
 
@@ -239,7 +255,7 @@ class STDiT(nn.Module):
 
         self.pos_embed = nn.Parameter(self.get_spatial_pos_embed(),
                                       requires_grad=False)
-        self.pos_embed_temporal = nn.Parameter(self.get_temporal_pos_embed(),
+        self.temporal_pos_embed = nn.Parameter(self.get_temporal_pos_embed(),
                                                requires_grad=False)
 
         drop_path = [val.item() for val in torch.linspace(0, drop_path, depth)]
@@ -254,6 +270,7 @@ class STDiT(nn.Module):
                 enable_flashattn=enable_flashattn,
                 enable_layernorm_kernel=enable_layernorm_kernel,
                 enable_sequence_parallelism=enable_sequence_parallelism,
+                debug=debug,
             ) for i in range(depth)
         ])
 
@@ -262,7 +279,7 @@ class STDiT(nn.Module):
                                          out_channels=self.out_channels)
 
         self.enable_grad_checkpoint = enable_grad_checkpoint
-        self.debug = debug
+        self.debugprint = debugprint(debug)
 
     def forward(self, x, t, y, mask=None):
         """
@@ -275,32 +292,34 @@ class STDiT(nn.Module):
             x: output latents for curren diffusion step [B, C, T, H, W]
         """
 
+        self.debugprint("inside ", self.__class__)
+
         # x embedding
-        if self.debug: print("inside ", self.__class__)
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
         x = self.x_embedder(x)  # [B, Nt*Nh*Nw, C]
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
+
         # prepare for spatial
         x = rearrange(x,
                       "B (T S) C -> B T S C",
                       T=self.num_temporal,
                       S=self.num_spatial)
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
         x = x + self.pos_embed
         x = rearrange(x, "B T S C -> B (T S) C")
-        if self.debug: print(x.shape)
+        self.debugprint(x.shape)
 
-        if self.debug: print("t shapes")
-        if self.debug: print(t.shape)
+        self.debugprint("t shapes")
+        self.debugprint(t.shape)
         t = self.t_embedder(t)  # [B, C]
-        if self.debug: print(t.shape)
+        self.debugprint(t.shape)
         t0 = self.t_block(t)  #[B, 6*C]
-        if self.debug: print(t0.shape)
+        self.debugprint(t0.shape)
 
-        if self.debug: print("y shapes")
-        if self.debug: print(y.shape)
+        self.debugprint("y shapes")
+        self.debugprint(y.shape)
         y = self.y_embedder(y, self.training)  # [B, 1, N_token, C]
-        if self.debug: print(y.shape)
+        self.debugprint(y.shape)
 
         if mask is not None:
             if mask.shape[0] != y.shape[0]:
@@ -311,17 +330,17 @@ class STDiT(nn.Module):
         else:
             y_lens = [y.shape[2]] * y.shape[0]
             y = y.squeeze(1).view(1, -1, y.shape[-1])  # [BxN_token, C]
-        if self.debug: print(y.shape)
+        self.debugprint(y.shape)
 
         for block in self.blocks:
             if self.enable_grad_checkpoint:
                 x = auto_grad_checkpoint(block, x, y, t0, y_lens,
-                                         self.pos_embed_temporal)
+                                         self.temporal_pos_embed)
             else:
-                x = block(x, y, t0, y_lens, self.pos_embed_temporal)
+                x = block(x, y, t0, y_lens, self.temporal_pos_embed)
 
-        x = self.final_layer(
-            x, t)  # [N, num_patches, patch_size_nd * out_channels]
+        # [N, num_patches, patch_size_nd * out_channels]
+        x = self.final_layer(x, t)
         x = self.unpatchify(x)  # [N, C, T, H, W]
 
         return x
@@ -360,8 +379,10 @@ class STDiT(nn.Module):
         return pos_embed
 
     def get_temporal_pos_embed(self):
-        pos_embed = get_1d_sincos_pos_embed(self.hidden_size,
-                                            self.input_size[0],
-                                            scale=self.time_scale)
+        pos_embed = get_1d_sincos_pos_embed(
+            self.hidden_size,
+            self.num_temporal,
+            scale=self.time_scale,
+        )
         pos_embed = torch.from_numpy(pos_embed).float().unsqueeze(0)
         return pos_embed

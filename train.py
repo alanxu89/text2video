@@ -264,6 +264,7 @@ def main():
         patch_size=cfg.patch_size,
         enable_grad_checkpoint=cfg.enable_grad_ckpt,
         enable_flashattn=cfg.enable_flashattn,
+        debug=cfg.debug,
     )
 
     model_numel, model_numel_trainable = get_model_numel(model)

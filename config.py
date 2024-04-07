@@ -1,6 +1,8 @@
 class Config:
 
     def __init__(self) -> None:
+        self.debug = False
+
         self.num_frames = 12
         self.frame_interval = 8
         self.image_size = (256, 256)
