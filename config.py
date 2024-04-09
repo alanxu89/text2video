@@ -12,8 +12,10 @@ class Config:
         self.num_heads = 12
         self.patch_size = (1, 2, 2)
 
+        self.joint_st_attn = True
+        self.enable_mem_eff_attn = True
+        self.enable_flashattn = False
         self.enable_grad_ckpt = True
-        self.enable_flashattn = True
 
         # Define dataset
         self.root = None

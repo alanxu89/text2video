@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from timm.models.vision_transformer import Mlp
 
-import xformers.ops
+import xformers.ops as xops
 
 approx_gelu = lambda: nn.GELU(approximate="tanh")
 
@@ -46,6 +46,7 @@ class Attention(nn.Module):
         proj_drop: float = 0.,
         norm_layer: nn.Module = nn.LayerNorm,
         enable_flashattn: bool = False,
+        enable_mem_eff_attn: bool = False,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, 'dim should be divisible by num_heads'
@@ -53,6 +54,7 @@ class Attention(nn.Module):
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
         self.enable_flashattn = enable_flashattn
+        self.enable_mem_eff_attn = enable_mem_eff_attn
 
         self.qkv = nn.Linear(in_features=dim,
                              out_features=dim * 3,
@@ -63,13 +65,15 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(p=proj_drop)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self,
+                x: torch.Tensor,
+                attn_bias: torch.Tensor = None) -> torch.Tensor:
         B, N, C = x.shape
 
         # qkv project and reshape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
 
-        if self.enable_flashattn:
+        if self.enable_flashattn or self.enable_mem_eff_attn:
             qkv = qkv.permute(2, 0, 1, 3, 4)  #[3, B, N, num_heads, head_dim]
         else:
             qkv = qkv.permute(2, 0, 3, 1, 4)  #[3, B, num_heads, N, head_dim]
@@ -88,6 +92,16 @@ class Attention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0,
                 softmax_scale=self.scale,
             )  # [B, N, num_heads, head_dim]
+        elif self.enable_mem_eff_attn:
+            # [B, N, num_heads, head_dim]
+            if attn_bias is not None:
+                attn_bias = attn_bias.unsqueeze(0).unsqueeze(0).repeat(
+                    [B, self.num_heads, 1, 1])
+            x = xops.memory_efficient_attention(q,
+                                                k,
+                                                v,
+                                                p=self.attn_drop.p,
+                                                attn_bias=attn_bias)
         else:
             q = q * self.scale
             attn = q @ k.transpose(-2, -1)  # only transpose the last two dims
@@ -138,13 +152,13 @@ class MultiHeadCrossAttention(nn.Module):
 
         attn_bias = None
         if mask is not None:
-            attn_bias = xformers.ops.fmha.BlockDiagonalMask.from_seqlens(
-                [N] * B, mask)
-        x = xformers.ops.memory_efficient_attention(q,
-                                                    k,
-                                                    v,
-                                                    p=self.attn_drop.p,
-                                                    attn_bias=attn_bias)
+            attn_bias = xops.fmha.BlockDiagonalMask.from_seqlens([N] * B, mask)
+
+        x = xops.memory_efficient_attention(q,
+                                            k,
+                                            v,
+                                            p=self.attn_drop.p,
+                                            attn_bias=attn_bias)
 
         x = x.view(B, N, C)
         x = self.proj(x)

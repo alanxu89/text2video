@@ -262,8 +262,10 @@ def main():
         hidden_size=cfg.hidden_size,
         num_heads=cfg.num_heads,
         patch_size=cfg.patch_size,
-        enable_grad_checkpoint=cfg.enable_grad_ckpt,
+        joint_st_attn=cfg.joint_st_attn,
+        enable_mem_eff_attn=cfg.enable_mem_eff_attn,
         enable_flashattn=cfg.enable_flashattn,
+        enable_grad_checkpoint=cfg.enable_grad_ckpt,
         debug=cfg.debug,
     )
 

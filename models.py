@@ -67,6 +67,52 @@ def debugprint(debug: bool = False):
         return nullfunc
 
 
+def attn_mask_func(i, j, T, H, W, t_window, s_window, time_first):
+    S = H * W
+    if time_first:
+        s1, t1 = i // T, i % T
+        s2, t2 = j // T, j % T
+    else:
+        t1, s1 = i // S, i % S
+        t2, s2 = j // S, j % S
+    x1, y1 = s1 // W, s1 % W
+    x2, y2 = s2 // W, s2 % W
+
+    # attention radius calculation
+    t_attn_radius = T if t_window < 1 else (t_window + 1) / 2
+    s_attn_radius = max(H, W) if s_window < 1 else (s_window + 1) / 2
+
+    if abs(x1 - x2) < s_attn_radius and abs(y1 - y2) < s_attn_radius and abs(
+            t1 - t2) < t_attn_radius:
+        return 1
+    else:
+        return 0
+
+
+def get_st_attn_mask(T, H, W, t_window, s_window, time_first=False):
+    S = H * W
+    N = T * S
+
+    xx, yy = np.meshgrid(np.arange(N, dtype=int), np.arange(N, dtype=int))
+    z = np.zeros_like(xx)
+    for i in range(N):
+        for j in range(N):
+            x = xx[0][i]
+            y = yy[j][0]
+            z[i, j] = attn_mask_func(x, y, T, H, W, t_window, s_window,
+                                     time_first)
+
+    return torch.from_numpy(z).to(torch.bool)
+
+
+def get_attn_bias_from_mask(mask: torch.Tensor):
+    """value of 1 is valid
+    """
+    not_mask = torch.logical_not(mask)
+    bias = torch.zeros(not_mask.shape).masked_fill(not_mask, float("-inf"))
+    return bias
+
+
 class STDiTBlock(nn.Module):
     """ similar to DiT Block with adaLN-Zero
 
@@ -84,6 +130,8 @@ class STDiTBlock(nn.Module):
         d_t=None,
         mlp_ratio=4.0,
         drop_path=0.0,
+        joint_st_attn=False,
+        enable_mem_eff_attn=False,
         enable_flashattn=False,
         enable_layernorm_kernel=False,
         enable_sequence_parallelism=False,
@@ -95,6 +143,7 @@ class STDiTBlock(nn.Module):
 
         self.hidden_size = hidden_size
         self.enable_flashattn = enable_flashattn
+        self.joint_st_attn = joint_st_attn
         self.d_s = d_s
         self.d_t = d_t
         self.debugprint = debugprint(debug)
@@ -121,11 +170,13 @@ class STDiTBlock(nn.Module):
         self.s_attn = Attention(hidden_size,
                                 num_heads=num_heads,
                                 qkv_bias=True,
-                                enable_flashattn=enable_flashattn)
+                                enable_flashattn=enable_flashattn,
+                                enable_mem_eff_attn=enable_mem_eff_attn)
         self.t_attn = Attention(hidden_size,
                                 num_heads=num_heads,
                                 qkv_bias=True,
-                                enable_flashattn=enable_flashattn)
+                                enable_flashattn=enable_flashattn,
+                                enable_mem_eff_attn=enable_mem_eff_attn)
 
         # cross attention between x and y(text prompts)
         self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads)
@@ -140,7 +191,7 @@ class STDiTBlock(nn.Module):
         self.drop_path = DropPath(
             drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, x, y, t, mask=None, tpe=None):
+    def forward(self, x, y, t, mask=None, tpe=None, st_attn_bias=None):
         self.debugprint("inside ", self.__class__)
 
         B, N, C = x.shape
@@ -170,9 +221,24 @@ class STDiTBlock(nn.Module):
         if tpe is not None:
             self.debugprint("tpe shape:", tpe.shape)
             x_t = x_t + tpe
-        x_t = self.t_attn(x_t)
-        self.debugprint(x_t.shape)
-        x_t = rearrange(x_t, "(b s) t c -> b (t s) c", t=self.d_t, s=self.d_s)
+        if self.joint_st_attn:
+            # joint spatial-temporal with a finite window size
+            # rearange and then apply attention
+            x_t = rearrange(x_t,
+                            "(b s) t c -> b (t s) c",
+                            t=self.d_t,
+                            s=self.d_s)
+            self.debugprint(x_t.shape)
+            x_t = self.t_attn(x_t, st_attn_bias)
+        else:
+            # spatial-only attention
+            # apply attention and then rearange
+            x_t = self.t_attn(x_t)
+            self.debugprint(x_t.shape)
+            x_t = rearrange(x_t,
+                            "(b s) t c -> b (t s) c",
+                            t=self.d_t,
+                            s=self.d_s)
         self.debugprint(x_t.shape)
         x = x + self.drop_path(gate_msa * x_t)
         self.debugprint(x.shape)
@@ -212,6 +278,8 @@ class STDiT(nn.Module):
         space_scale=1.0,
         time_scale=1.0,
         freeze=None,
+        joint_st_attn=False,
+        enable_mem_eff_attn=False,
         enable_flashattn=False,
         enable_layernorm_kernel=False,
         enable_sequence_parallelism=False,
@@ -221,6 +289,9 @@ class STDiT(nn.Module):
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
+
+        self.debugprint = debugprint(debug)
+        self.enable_grad_checkpoint = enable_grad_checkpoint
 
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -267,6 +338,8 @@ class STDiT(nn.Module):
                 d_t=self.num_temporal,
                 mlp_ratio=mlp_ratio,
                 drop_path=drop_path[i],
+                joint_st_attn=joint_st_attn,
+                enable_mem_eff_attn=enable_mem_eff_attn,
                 enable_flashattn=enable_flashattn,
                 enable_layernorm_kernel=enable_layernorm_kernel,
                 enable_sequence_parallelism=enable_sequence_parallelism,
@@ -274,12 +347,20 @@ class STDiT(nn.Module):
             ) for i in range(depth)
         ])
 
+        self.st_attn_bias = None
+        if joint_st_attn:
+            st_attn_mask = get_st_attn_mask(T=self.num_temporal,
+                                            H=self.num_spatial_h,
+                                            W=self.num_spatial_w,
+                                            t_window=128,
+                                            s_window=5)
+            self.st_attn_bias = nn.Parameter(
+                get_attn_bias_from_mask(st_attn_mask), requires_grad=False)
+            self.debugprint("st attn bias shape", self.st_attn_bias.shape)
+
         self.final_layer = T2IFinalLayer(hidden_size,
                                          self.patch_size_nd,
                                          out_channels=self.out_channels)
-
-        self.enable_grad_checkpoint = enable_grad_checkpoint
-        self.debugprint = debugprint(debug)
 
     def forward(self, x, t, y, mask=None):
         """
@@ -335,9 +416,11 @@ class STDiT(nn.Module):
         for block in self.blocks:
             if self.enable_grad_checkpoint:
                 x = auto_grad_checkpoint(block, x, y, t0, y_lens,
-                                         self.temporal_pos_embed)
+                                         self.temporal_pos_embed,
+                                         self.st_attn_bias)
             else:
-                x = block(x, y, t0, y_lens, self.temporal_pos_embed)
+                x = block(x, y, t0, y_lens, self.temporal_pos_embed,
+                          self.st_attn_bias)
 
         # [N, num_patches, patch_size_nd * out_channels]
         x = self.final_layer(x, t)
