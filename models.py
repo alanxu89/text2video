@@ -271,9 +271,10 @@ class STDiT(nn.Module):
                                             H=self.num_spatial_h,
                                             W=self.num_spatial_w,
                                             t_window=128,
-                                            s_window=5)
-            self.st_attn_bias = nn.Parameter(
-                get_attn_bias_from_mask(st_attn_mask), requires_grad=False)
+                                            s_window=5)  # [M, M]
+            st_attn_bias = get_attn_bias_from_mask(st_attn_mask).unsqueeze(
+                0).repeat([num_heads, 1, 1])  # [H, M, M]
+            self.st_attn_bias = nn.Parameter(st_attn_bias, requires_grad=False)
             self.debugprint("st attn bias shape", self.st_attn_bias.shape)
 
         self.final_layer = T2IFinalLayer(hidden_size,
@@ -290,6 +291,7 @@ class STDiT(nn.Module):
         Returns:
             x: output latents for curren diffusion step [B, C, T, H, W]
         """
+        bs = x.shape[0]
 
         self.debugprint("inside ", self.__class__)
 
@@ -331,14 +333,18 @@ class STDiT(nn.Module):
             y = y.squeeze(1).view(1, -1, y.shape[-1])  # [BxN_token, C]
         self.debugprint(y.shape)
 
+        st_attn_bias = self.st_attn_bias
+        if self.st_attn_bias is not None:
+            st_attn_bias = self.st_attn_bias.unsqueeze(0).repeat(
+                [bs, 1, 1, 1])  # [B, H, M, M]
+
         for block in self.blocks:
             if self.enable_grad_checkpoint:
                 x = auto_grad_checkpoint(block, x, y, t0, y_lens,
-                                         self.temporal_pos_embed,
-                                         self.st_attn_bias)
+                                         self.temporal_pos_embed, st_attn_bias)
             else:
                 x = block(x, y, t0, y_lens, self.temporal_pos_embed,
-                          self.st_attn_bias)
+                          st_attn_bias)
 
         # [N, num_patches, patch_size_nd * out_channels]
         x = self.final_layer(x, t)
