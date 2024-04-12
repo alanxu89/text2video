@@ -47,7 +47,7 @@ def debugprint(debug: bool = False):
         return nullfunc
 
 
-def attn_mask_func(i, j, T, H, W, t_window, s_window, time_first):
+def attn_mask_func(i, j, T, H, W, t_window, s_window, time_first, causal):
     S = H * W
     if time_first:
         s1, t1 = i // T, i % T
@@ -62,8 +62,11 @@ def attn_mask_func(i, j, T, H, W, t_window, s_window, time_first):
     t_attn_radius = T if t_window < 1 else (t_window + 1) / 2
     s_attn_radius = max(H, W) if s_window < 1 else (s_window + 1) / 2
 
+    # if consider causal relation, the timestamp of key must be earlier than that of the query
+    t_cond = (t2 <= t1) if causal else True
+
     if abs(x1 - x2) < s_attn_radius and abs(y1 - y2) < s_attn_radius and abs(
-            t1 - t2) < t_attn_radius:
+            t1 - t2) < t_attn_radius and t_cond:
         return 1
     else:
         return 0
@@ -79,8 +82,15 @@ def get_st_attn_mask(T, H, W, t_window, s_window, time_first=False):
         for j in range(N):
             x = xx[0][i]
             y = yy[j][0]
-            z[i, j] = attn_mask_func(x, y, T, H, W, t_window, s_window,
-                                     time_first)
+            z[i, j] = attn_mask_func(x,
+                                     y,
+                                     T,
+                                     H,
+                                     W,
+                                     t_window,
+                                     s_window,
+                                     time_first,
+                                     causal=True)
 
     return torch.from_numpy(z).to(torch.bool)
 
