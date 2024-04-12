@@ -163,7 +163,7 @@ class STDiTBlock(nn.Module):
 
         # cross attention
         self.debugprint("cross attn")
-        self.debugprint(x.shape)
+        self.debugprint(x.shape, y.shape)
         x = x + self.cross_attn(x, y, mask)
         self.debugprint(x.shape)
 
@@ -270,7 +270,7 @@ class STDiT(nn.Module):
             st_attn_mask = get_st_attn_mask(T=self.num_temporal,
                                             H=self.num_spatial_h,
                                             W=self.num_spatial_w,
-                                            t_window=128,
+                                            t_window=8,
                                             s_window=5)  # [M, M]
             st_attn_bias = get_attn_bias_from_mask(st_attn_mask).unsqueeze(
                 0).repeat([num_heads, 1, 1])  # [H, M, M]
