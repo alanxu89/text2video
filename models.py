@@ -46,9 +46,12 @@ class STDiTBlock(nn.Module):
         num_heads,
         d_s=None,
         d_t=None,
+        d_s_h=16,
+        d_s_w=16,
         mlp_ratio=4.0,
         drop_path=0.0,
         joint_st_attn=False,
+        use_3dconv=False,
         enable_mem_eff_attn=False,
         enable_flashattn=False,
         enable_layernorm_kernel=False,
@@ -64,6 +67,8 @@ class STDiTBlock(nn.Module):
         self.joint_st_attn = joint_st_attn
         self.d_s = d_s
         self.d_t = d_t
+        self.d_s_h = d_s_h
+        self.d_s_w = d_s_w
         self.debugprint = debugprint(debug)
 
         # layer norm for self-attention and mlp
@@ -109,6 +114,23 @@ class STDiTBlock(nn.Module):
         self.drop_path = DropPath(
             drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
 
+        # similar to the Conv3D layers in Align your Latents paper
+        self.use_3dconv = False
+        if self.use_3dconv:
+            k, p = (3, 3, 3), (1, 1, 1)
+            self.conv1 = nn.Sequential(
+                nn.GroupNorm(32, hidden_size),
+                nn.SiLU(),
+                nn.Conv3d(hidden_size, 256, kernel_size=k, stride=1,
+                          padding=p),
+            )
+            self.conv2 = nn.Sequential(
+                nn.GroupNorm(32, 256),
+                nn.SiLU(),
+                nn.Conv3d(256, hidden_size, kernel_size=k, stride=1,
+                          padding=p),
+            )
+
     def forward(self, x, y, t, mask=None, tpe=None, st_attn_bias=None):
         self.debugprint("inside ", self.__class__)
 
@@ -141,13 +163,30 @@ class STDiTBlock(nn.Module):
             x_t = x_t + tpe
         if self.joint_st_attn:
             # joint spatial-temporal with a finite window size
-            # rearange and then apply attention
-            x_t = rearrange(x_t,
-                            "(b s) t c -> b (t s) c",
-                            t=self.d_t,
-                            s=self.d_s)
-            self.debugprint(x_t.shape)
-            x_t = self.t_attn(x_t, st_attn_bias)
+            if self.use_3dconv:
+                self.debugprint("use conv3D")
+                # rearange and then apply conv
+                x_t = rearrange(x_t,
+                                "(b s_h s_w) t c -> b c t s_h s_w",
+                                t=self.d_t,
+                                s_h=self.d_s_h,
+                                s_w=self.d_s_w)
+                self.debugprint(x_t.shape)
+                x_t = self.conv1(x_t)
+                self.debugprint(x_t.shape)
+                x_t = self.conv2(x_t)
+                self.debugprint(x_t.shape)
+                x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
+                self.debugprint(x_t.shape)
+            else:
+                self.debugprint("use self-attn")
+                # rearange and then apply attention
+                x_t = rearrange(x_t,
+                                "(b s) t c -> b (t s) c",
+                                t=self.d_t,
+                                s=self.d_s)
+                self.debugprint(x_t.shape)
+                x_t = self.t_attn(x_t, st_attn_bias)
         else:
             # spatial-only attention
             # apply attention and then rearange
@@ -197,6 +236,7 @@ class STDiT(nn.Module):
         time_scale=1.0,
         freeze=None,
         joint_st_attn=False,
+        use_3dconv=False,
         enable_mem_eff_attn=False,
         enable_flashattn=False,
         enable_layernorm_kernel=False,
@@ -233,7 +273,9 @@ class STDiT(nn.Module):
                                        embed_dim=hidden_size)
         self.t_embedder = TimestepEmbedder(hidden_size=hidden_size)
         self.t_block = nn.Sequential(
-            nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
+            nn.SiLU(),
+            nn.Linear(hidden_size, 6 * hidden_size, bias=True),
+        )
         self.y_embedder = CaptionEmbedder(
             in_channels=caption_channels,
             hidden_size=hidden_size,
@@ -254,9 +296,12 @@ class STDiT(nn.Module):
                 num_heads=num_heads,
                 d_s=self.num_spatial,
                 d_t=self.num_temporal,
+                d_s_h=self.num_spatial_h,
+                d_s_w=self.num_spatial_w,
                 mlp_ratio=mlp_ratio,
                 drop_path=drop_path[i],
                 joint_st_attn=joint_st_attn,
+                use_3dconv=use_3dconv,
                 enable_mem_eff_attn=enable_mem_eff_attn,
                 enable_flashattn=enable_flashattn,
                 enable_layernorm_kernel=enable_layernorm_kernel,

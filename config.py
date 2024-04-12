@@ -13,6 +13,7 @@ class Config:
         self.patch_size = (1, 2, 2)
 
         self.joint_st_attn = True
+        self.use_3dconv = False
         self.enable_mem_eff_attn = True
         self.enable_flashattn = False
         self.enable_grad_ckpt = True
