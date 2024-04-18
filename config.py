@@ -4,7 +4,7 @@ class Config:
         self.debug = False
 
         self.num_frames = 12
-        self.frame_interval = 8
+        self.frame_interval = 5
         self.image_size = (256, 256)
 
         self.depth = 12
@@ -18,10 +18,15 @@ class Config:
         self.enable_flashattn = False
         self.enable_grad_ckpt = True
 
+        # text encoder
+        self.model_max_length = 512
+
         # Define dataset
-        self.root = None
-        # self.data_path = "/home/ubuntu/Downloads/data_train_partitions_0000.csv"
-        self.data_path = "/home/ubuntu/Downloads/data_train_partitions_0000_4/1.csv"
+        # self.root = "/home/ubuntu/Documents/webvid/data/videos"
+        # self.data_path = "/home/ubuntu/Downloads/data_train_partitions_0000_4/1.csv"
+        self.root = "/mnt/sda/open_sora_plan_data"
+        self.data_path = "mixkit.csv"
+
         self.use_image_transform = False
         self.num_workers = 8
 
@@ -36,9 +41,9 @@ class Config:
         self.outputs = "outputs"
         self.wandb = False
 
-        self.epochs = 1000
+        self.epochs = 100
         self.log_every = 10
-        self.ckpt_every = 1000
+        self.ckpt_every = 10000
         self.load = None
 
         self.batch_size = 8

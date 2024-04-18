@@ -39,7 +39,12 @@ class DatasetFromCSV(torch.utils.data.Dataset):
                  root=None):
         # import pandas
         self.samples = []
-        with open(csv_path) as f:
+        self.csv_path = csv_path
+        self.root = root
+        if not os.path.exists(csv_path) and root is not None:
+            self.csv_path = os.path.join(self.root, csv_path)
+
+        with open(self.csv_path) as f:
             reader = csv.reader(f)
             next(reader)
             for row in reader:
@@ -51,8 +56,6 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         self.num_frames = num_frames
         self.frame_interval = frame_interval
         self.num_real_frames = 1 + (num_frames - 1) * frame_interval
-        # self.root = root
-        self.root = "/home/ubuntu/Documents/webvid/data/videos"
 
     def getitem(self, index):
         t0 = time.time()

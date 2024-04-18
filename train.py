@@ -229,7 +229,8 @@ def main():
     dataset = DatasetFromCSV(cfg.data_path,
                              num_frames=cfg.num_frames,
                              frame_interval=cfg.frame_interval,
-                             transform=get_transforms_video())
+                             transform=get_transforms_video(),
+                             root=cfg.root)
     sampler = StatefulDistributedSampler(dataset,
                                          num_replicas=dist.get_world_size(),
                                          rank=dist.get_rank(),
@@ -251,6 +252,7 @@ def main():
     latent_size = vae.get_latent_size(input_size)
 
     text_encoder = T5Encoder(from_pretrained="DeepFloyd/t5-v1_1-xxl",
+                             model_max_length=cfg.model_max_length,
                              dtype=torch.float16)
 
     model = STDiT(
@@ -369,7 +371,7 @@ def main():
                                            1) % cfg.ckpt_every == 0:
                     if rank == 0:
                         checkpoint = {
-                            "model": model.module.state_dict(),
+                            "model": model.state_dict(),
                             "ema": ema.state_dict(),
                             "opt": opt.state_dict(),
                             "cfg": cfg
