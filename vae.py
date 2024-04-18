@@ -9,6 +9,7 @@ class VideoAutoEncoderKL(nn.Module):
 
     def __init__(self,
                  pretrained_model,
+                 scaling_factor=0.13025,
                  micro_batch_size=None,
                  patch_size=(1, 8, 8),
                  *args,
@@ -17,6 +18,7 @@ class VideoAutoEncoderKL(nn.Module):
 
         self.image_vae = AutoencoderKL.from_pretrained(
             pretrained_model, torch_dtype=torch.float16)
+        self.scaling_factor = scaling_factor
         self.out_channels = self.image_vae.config.latent_channels
         self.micro_batch_size = micro_batch_size
         self.patch_size = patch_size
@@ -26,14 +28,15 @@ class VideoAutoEncoderKL(nn.Module):
         x = rearrange(x, "B C T H W -> (B T) C H W")
 
         if self.micro_batch_size is None:
-            x = self.image_vae.encode(x).latent_dist.sample().mul_(0.18215)
+            x = self.image_vae.encode(x).latent_dist.sample().mul_(
+                self.scaling_factor)
         else:
             bs = self.micro_batch_size
             x_out = []
             for i in range(0, x.shape[0], bs):
                 x_mb = x[i:i + bs]
                 x_mb = self.image_vae.encode(x_mb).latent_dist.sample().mul_(
-                    0.18215)
+                    self.scaling_factor)
                 x_out.append(x_mb)
             x = torch.cat(x_out, dim=0)
         x = rearrange(x, "(B T) C H W -> B C T H W", B=b)
@@ -44,13 +47,13 @@ class VideoAutoEncoderKL(nn.Module):
         b = x.shape[0]
         x = rearrange(x, "B C T H W -> (B T) C H W")
         if self.micro_batch_size is None:
-            x = self.image_vae.decode(x / 0.18215).sample
+            x = self.image_vae.decode(x / self.scaling_factor).sample
         else:
             bs = self.micro_batch_size
             x_out = []
             for i in range(0, x.shape[0], bs):
                 x_mb = x[i:i + bs]
-                x_mb = self.image_vae.decode(x_mb / 0.18215).sample
+                x_mb = self.image_vae.decode(x_mb / self.scaling_factor).sample
                 x_out.append(x_mb)
             x = torch.cat(x_out, dim=0)
         x = rearrange(x, "(B T) C H W -> B C T H W", B=b)

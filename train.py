@@ -247,11 +247,11 @@ def main():
     logger.info(f"Total batch size: {total_batch_size}")
 
     # model
-    vae = VideoAutoEncoderKL("stabilityai/sd-vae-ft-ema")
+    vae = VideoAutoEncoderKL(cfg.vae_pretrained, cfg.vae_scaling_factor)
     input_size = (cfg.num_frames, *cfg.image_size)
     latent_size = vae.get_latent_size(input_size)
 
-    text_encoder = T5Encoder(from_pretrained="DeepFloyd/t5-v1_1-xxl",
+    text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
                              model_max_length=cfg.model_max_length,
                              dtype=torch.float16)
 

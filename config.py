@@ -18,7 +18,14 @@ class Config:
         self.enable_flashattn = False
         self.enable_grad_ckpt = True
 
+        # pretrained vae
+        # self.vae_pretrained = "stabilityai/sd-vae-ft-ema"
+        # self.vae_scaling_factor = 0.18215
+        self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
+        self.vae_scaling_factor = 0.13025
+
         # text encoder
+        self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"
         self.model_max_length = 512
 
         # Define dataset
