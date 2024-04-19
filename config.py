@@ -35,10 +35,10 @@ class Config:
         self.data_path = "mixkit.csv"
 
         self.use_image_transform = False
-        self.num_workers = 8
+        self.num_workers = 6
 
         # Define acceleration
-        self.dtype = "fp16"
+        self.dtype = "fp32"
         self.grad_checkpoint = True
         self.plugin = "zero2"
         self.sp_size = 1
@@ -53,6 +53,9 @@ class Config:
         self.ckpt_every = 10000
         self.load = None
 
-        self.batch_size = 8
-        self.lr = 2e-5
+        self.batch_size = 6
+        self.lr = 5e-5
         self.grad_clip = 1.0
+
+        self.save_dir = "outputs/samples/"
+        self.ckpt_path = "outputs/000/checkpoints/0039999.pt"

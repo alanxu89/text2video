@@ -94,6 +94,8 @@ class Attention(nn.Module):
             )  # [B, N, num_heads, head_dim]
         elif self.enable_mem_eff_attn:
             # [B, N, num_heads, head_dim]
+            if attn_bias is not None:
+                attn_bias = attn_bias.to(q.dtype)
             x = xops.memory_efficient_attention(q,
                                                 k,
                                                 v,

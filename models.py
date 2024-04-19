@@ -391,9 +391,12 @@ class STDiT(nn.Module):
                 x = block(x, y, t0, y_lens, self.temporal_pos_embed,
                           st_attn_bias)
 
+        self.debugprint("blocks out:", x.shape)
         # [N, num_patches, patch_size_nd * out_channels]
         x = self.final_layer(x, t)
+        self.debugprint("final layer: ", x.shape)
         x = self.unpatchify(x)  # [N, C, T, H, W]
+        self.debugprint("STDiT output: ", x.shape)
 
         return x
 

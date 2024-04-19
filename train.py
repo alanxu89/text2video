@@ -9,9 +9,11 @@ import argparse
 from tqdm import tqdm
 
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 
 from datasets import DatasetFromCSV, get_transforms_video
 from vae import VideoAutoEncoderKL
@@ -87,6 +89,13 @@ def create_logger(logging_dir):
         logger = logging.getLogger(__name__)
         logger.addHandler(logging.NullHandler())
     return logger
+
+
+def create_tensorboard_writer(exp_dir):
+    tensorboard_dir = f"{exp_dir}/tensorboard"
+    os.makedirs(tensorboard_dir, exist_ok=True)
+    writer = SummaryWriter(tensorboard_dir)
+    return writer
 
 
 def all_reduce_mean(tensor: torch.Tensor) -> torch.Tensor:
@@ -222,6 +231,8 @@ def main():
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(experiment_dir)
         logger.info(f"Experiment directory created at {experiment_dir}")
+
+        writer = create_tensorboard_writer(experiment_dir)
     else:
         logger = create_logger(None)
 
@@ -319,6 +330,9 @@ def main():
     # dataloader.sampler.set_start_index(sampler_start_idx)
     # model_sharding(ema)
 
+    # Creates a GradScaler once at the beginning of training.
+    scaler = torch.cuda.amp.GradScaler()
+
     # 6.2. training loop
     for epoch in range(start_epoch, cfg.epochs):
         dataloader.sampler.set_epoch(epoch)
@@ -334,6 +348,9 @@ def main():
         ) as pbar:
 
             for step in pbar:
+                # step
+                opt.zero_grad()
+
                 batch = next(dataloader_iter)
                 x = batch["video"].to(device, dtype)  # [B, C, T, H, W]
                 y = batch["text"]
@@ -349,13 +366,28 @@ def main():
                                   high=scheduler.num_timesteps,
                                   size=(x.shape[0], ),
                                   device=device)
-                loss_dict = scheduler.training_losses(model, x, t, model_args)
-                loss = loss_dict["loss"].mean()
 
-                # step
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
+                # Enables autocasting for the forward pass (model + loss)
+                with torch.autocast(device_type="cuda"):
+                    loss_dict = scheduler.training_losses(
+                        model, x, t, model_args)
+                    loss = loss_dict["loss"].mean()
+
+                scaler.scale(loss).backward()
+
+                # scaler.step() first unscales gradients of the optimizer's params.
+                # If gradients don't contain infs/NaNs, optimizer.step() is then called,
+                # otherwise, optimizer.step() is skipped.
+                scaler.step(opt)
+
+                # Updates the scale for next iteration.
+                scaler.update()
+
+                # loss.backward()
+                # nn.utils.clip_grad_norm_(model.parameters(),
+                #                          cfg.grad_clip,
+                #                          norm_type=2)
+                # opt.step()
 
                 # Update EMA
                 update_ema(ema, model, decay=0, sharded=False)
@@ -365,6 +397,18 @@ def main():
                 running_loss += loss.item()
                 global_step = epoch * num_steps_per_epoch + step
                 log_step += 1
+
+                # Log to tensorboard
+                if (global_step + 1) % cfg.log_every == 0:
+                    avg_loss = running_loss / log_step
+                    pbar.set_postfix({
+                        "loss": avg_loss,
+                        "step": step,
+                        "global_step": global_step
+                    })
+                    running_loss = 0
+                    log_step = 0
+                    writer.add_scalar("loss", loss.item(), global_step)
 
                 # Save checkpoint
                 if cfg.ckpt_every > 0 and (global_step +
