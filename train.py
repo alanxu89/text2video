@@ -299,6 +299,7 @@ def main():
     model = model.to(device, dtype)
 
     model.train()
+    vae.eval()
     update_ema(ema, model, decay=0, sharded=False)
     ema.eval()
 
@@ -333,6 +334,7 @@ def main():
     # Creates a GradScaler once at the beginning of training.
     scaler = torch.cuda.amp.GradScaler()
 
+    # torch.autograd.set_detect_anomaly(True)
     # 6.2. training loop
     for epoch in range(start_epoch, cfg.epochs):
         dataloader.sampler.set_epoch(epoch)
@@ -348,9 +350,9 @@ def main():
         ) as pbar:
 
             for step in pbar:
-                # step
-                opt.zero_grad()
+                global_step = epoch * num_steps_per_epoch + step
 
+                # step
                 batch = next(dataloader_iter)
                 x = batch["video"].to(device, dtype)  # [B, C, T, H, W]
                 y = batch["text"]
@@ -368,20 +370,27 @@ def main():
                                   device=device)
 
                 # Enables autocasting for the forward pass (model + loss)
-                with torch.autocast(device_type="cuda"):
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
                     loss_dict = scheduler.training_losses(
                         model, x, t, model_args)
                     loss = loss_dict["loss"].mean()
+                    loss = loss / cfg.accum_iter
 
+                # with torch.autograd.detect_anomaly():
                 scaler.scale(loss).backward()
+                # loss.backward()
 
-                # scaler.step() first unscales gradients of the optimizer's params.
-                # If gradients don't contain infs/NaNs, optimizer.step() is then called,
-                # otherwise, optimizer.step() is skipped.
-                scaler.step(opt)
+                if global_step % cfg.accum_iter == 0:
 
-                # Updates the scale for next iteration.
-                scaler.update()
+                    # scaler.step() first unscales gradients of the optimizer's params.
+                    # If gradients don't contain infs/NaNs, optimizer.step() is then called,
+                    # otherwise, optimizer.step() is skipped.
+                    scaler.step(opt)
+                    # Updates the scale for next iteration.
+                    scaler.update()
+
+                    # opt.step()
+                    opt.zero_grad()
 
                 # loss.backward()
                 # nn.utils.clip_grad_norm_(model.parameters(),
@@ -395,7 +404,6 @@ def main():
                 # Log loss values:
                 all_reduce_mean(loss)
                 running_loss += loss.item()
-                global_step = epoch * num_steps_per_epoch + step
                 log_step += 1
 
                 # Log to tensorboard
