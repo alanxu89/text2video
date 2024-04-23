@@ -48,13 +48,14 @@ class Config:
         self.outputs = "outputs"
         self.wandb = False
 
-        self.epochs = 100
-        self.log_every = 10
+        self.epochs = 75
+        self.log_every = 2
         self.ckpt_every = 10000
         self.load = None
+        self.accum_iter = 4
 
-        self.batch_size = 6
-        self.lr = 5e-5
+        self.batch_size = 4
+        self.lr = 3e-5
         self.grad_clip = 1.0
 
         self.save_dir = "outputs/samples/"
