@@ -188,7 +188,7 @@ class STDiTBlock(nn.Module):
                 self.debugprint(x_t.shape)
                 x_t = self.t_attn(x_t, st_attn_bias)
         else:
-            # spatial-only attention
+            # temporal-only attention
             # apply attention and then rearange
             x_t = self.t_attn(x_t)
             self.debugprint(x_t.shape)

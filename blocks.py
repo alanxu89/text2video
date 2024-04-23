@@ -264,7 +264,7 @@ class TimestepEmbedder(nn.Module):
         freqs = freqs.to(device=t.device)
         phases = t[:, None].float() * freqs[None]
         emb = torch.cat(
-            [torch.sin(phases), torch.sin(phases)], dim=1).to(torch.float16)
+            [torch.sin(phases), torch.sin(phases)], dim=1)  #.to(torch.float16)
 
         return emb
 
