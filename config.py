@@ -59,4 +59,4 @@ class Config:
         self.grad_clip = 1.0
 
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "outputs/000/checkpoints/0039999.pt"
+        self.ckpt_path = "outputs/003/checkpoints/0049999.pt"

@@ -84,7 +84,7 @@ def main():
     # model
     vae = VideoAutoEncoderKL(cfg.vae_pretrained,
                              cfg.vae_scaling_factor,
-                             micro_batch_size=None)
+                             micro_batch_size=1)
     input_size = (cfg.num_frames, *cfg.image_size)
     latent_size = vae.get_latent_size(input_size)
 
@@ -139,7 +139,7 @@ def main():
         # )
 
         # print(samples.shape)
-        torch.save(samples.to(dtype), "mytensor.pt")
+        # torch.save(samples.to(dtype), "mytensor.pt")
         samples = torch.load("mytensor.pt")
         # time.sleep(10)
         print(torch.min(samples), torch.max(samples))
@@ -149,7 +149,7 @@ def main():
             print(f"Prompt: {batch_prompts[idx]}")
             save_path = os.path.join(save_dir, f"sample_{sample_idx}")
             print(torch.min(sample), torch.max(sample))
-            # save_sample(sample, fps=6, save_path=save_path)
+            save_sample(sample, fps=6, save_path=save_path)
             sample_idx += 1
 
 
