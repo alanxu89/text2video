@@ -128,6 +128,7 @@ class MultiHeadCrossAttention(nn.Module):
                  num_heads,
                  attn_drop=0.0,
                  proj_drop=0.0,
+                 d_kv=None,
                  *args,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -137,7 +138,9 @@ class MultiHeadCrossAttention(nn.Module):
         self.head_dim = d_model // num_heads
 
         self.q_linear = nn.Linear(d_model, d_model)
-        self.kv_linear = nn.Linear(d_model, d_model * 2)
+        if d_kv is None:
+            d_kv = d_model
+        self.kv_linear = nn.Linear(d_kv, d_model * 2)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(d_model, d_model)
         self.proj_drop = nn.Dropout(proj_drop)
