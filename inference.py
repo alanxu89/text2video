@@ -52,20 +52,12 @@ def save_sample(x, fps=8, save_path=None, normalize=True, value_range=(-1, 1)):
         save_path += ".mp4"
         if normalize:
             low, high = value_range
-            print(torch.min(x), torch.max(x))
-
             x = torch.clamp(x, min=low, max=high)
             x = (x - low) / max(high - low, 1e-5)
-            # x = x.clamp_(min=low, max=high).sub_(low).div_(max(high - low, 1e-5))
-            # x.sub_(low).div_(max(high - low, 1e-5))
 
-        print(x.dtype)
         x = x.mul(255).add_(0.5).clamp_(0,
                                         255).permute(1, 2, 3,
                                                      0).to("cpu", torch.uint8)
-        print(x.dtype)
-        print(x.shape)
-        print(torch.min(x), torch.max(x))
         write_video(save_path, x, fps=fps, video_codec="h264")
     print(f"Saved to {save_path}")
     return save_path
@@ -84,36 +76,36 @@ def main():
     # model
     vae = VideoAutoEncoderKL(cfg.vae_pretrained,
                              cfg.vae_scaling_factor,
-                             micro_batch_size=1)
+                             micro_batch_size=8)
     input_size = (cfg.num_frames, *cfg.image_size)
     latent_size = vae.get_latent_size(input_size)
 
-    # text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
-    #                          model_max_length=cfg.model_max_length,
-    #                          dtype=torch.float16)
+    text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
+                             model_max_length=cfg.model_max_length,
+                             dtype=torch.float16)
 
-    # model = STDiT(
-    #     input_size=latent_size,
-    #     in_channels=vae.out_channels,
-    #     caption_channels=text_encoder.output_dim,
-    #     model_max_length=text_encoder.model_max_length,
-    #     depth=cfg.depth,
-    #     hidden_size=cfg.hidden_size,
-    #     num_heads=cfg.num_heads,
-    #     patch_size=cfg.patch_size,
-    #     joint_st_attn=cfg.joint_st_attn,
-    #     use_3dconv=cfg.use_3dconv,
-    #     enable_mem_eff_attn=cfg.enable_mem_eff_attn,
-    #     enable_flashattn=cfg.enable_flashattn,
-    #     enable_grad_checkpoint=cfg.enable_grad_ckpt,
-    #     debug=cfg.debug,
-    # )
-    # text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
+    model = STDiT(
+        input_size=latent_size,
+        in_channels=vae.out_channels,
+        caption_channels=text_encoder.output_dim,
+        model_max_length=text_encoder.model_max_length,
+        depth=cfg.depth,
+        hidden_size=cfg.hidden_size,
+        num_heads=cfg.num_heads,
+        patch_size=cfg.patch_size,
+        joint_st_attn=cfg.joint_st_attn,
+        use_3dconv=cfg.use_3dconv,
+        enable_mem_eff_attn=cfg.enable_mem_eff_attn,
+        enable_flashattn=cfg.enable_flashattn,
+        enable_grad_checkpoint=cfg.enable_grad_ckpt,
+        debug=cfg.debug,
+    )
+    text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
 
     # 4.3. move to device
     vae = vae.to(device, dtype).eval()
-    # model = model.to(device, dtype).eval()
-    # load_checkpoint(model, cfg.ckpt_path)
+    model = model.to(device, dtype).eval()
+    load_checkpoint(model, cfg.ckpt_path)
 
     scheduler = IDDPM(timestep_respacing="")
 
@@ -129,26 +121,25 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
     for i in range(0, len(prompts), cfg.batch_size):
         batch_prompts = prompts[i:i + cfg.batch_size]
-        # samples = scheduler.sample(
-        #     model,
-        #     text_encoder,
-        #     z_size=(vae.out_channels, *latent_size),
-        #     prompts=batch_prompts,
-        #     device=device,
-        #     additional_args=model_args,
-        # )
 
-        # print(samples.shape)
-        # torch.save(samples.to(dtype), "mytensor.pt")
-        samples = torch.load("mytensor.pt")
-        # time.sleep(10)
-        print(torch.min(samples), torch.max(samples))
-        samples = vae.decode(samples.to(dtype))
+        # save vram with no_grad
+        with torch.no_grad():
+            samples = scheduler.sample(
+                model,
+                text_encoder,
+                z_size=(vae.out_channels, *latent_size),
+                prompts=batch_prompts,
+                device=device,
+                additional_args=model_args,
+            )
+
+            print("decoding...")
+            samples = vae.decode(samples)
+            print("done\n")
 
         for idx, sample in enumerate(samples):
-            print(f"Prompt: {batch_prompts[idx]}")
+            print(f"Prompt:\n {batch_prompts[idx]}")
             save_path = os.path.join(save_dir, f"sample_{sample_idx}")
-            print(torch.min(sample), torch.max(sample))
             save_sample(sample, fps=6, save_path=save_path)
             sample_idx += 1
 
