@@ -277,6 +277,8 @@ class GaussianDiffusion:
                  - 'log_variance': the log of 'variance'.
                  - 'pred_xstart': the prediction for x_0.
         """
+        x_dtype = x.dtype
+
         if model_kwargs is None:
             model_kwargs = {}
 
@@ -333,7 +335,10 @@ class GaussianDiffusion:
         model_mean, _, _ = self.q_posterior_mean_variance(x_start=pred_xstart,
                                                           x_t=x,
                                                           t=t)
-
+        model_mean = model_mean.to(x_dtype)
+        model_variance = model_variance.to(x_dtype)
+        model_log_variance = model_log_variance.to(x_dtype)
+        pred_xstart = pred_xstart.to(x_dtype)
         assert model_mean.shape == model_log_variance.shape == pred_xstart.shape == x.shape
         return {
             "mean": model_mean,
@@ -423,8 +428,8 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
         )
         noise = th.randn_like(x)
-        nonzero_mask = ((t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
-                        )  # no noise when t == 0
+        nonzero_mask = ((t != 0).view(-1, *([1] * (len(x.shape) - 1)))).to(
+            x.dtype)  # no noise when t == 0
         if cond_fn is not None:
             out["mean"] = self.condition_mean(cond_fn,
                                               out,

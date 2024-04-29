@@ -357,7 +357,7 @@ class STDiT(nn.Module):
 
         self.debugprint("t shapes")
         self.debugprint(t.shape)
-        t = self.t_embedder(t)  # [B, C]
+        t = self.t_embedder(t, x.dtype)  # [B, C]
         self.debugprint(t.shape)
         t0 = self.t_block(t)  #[B, 6*C]
         self.debugprint(t0.shape)

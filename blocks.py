@@ -266,13 +266,13 @@ class TimestepEmbedder(nn.Module):
                           torch.arange(0, half, dtype=torch.float32) / half)
         freqs = freqs.to(device=t.device)
         phases = t[:, None].float() * freqs[None]
-        emb = torch.cat(
-            [torch.sin(phases), torch.sin(phases)], dim=1)  #.to(torch.float16)
-
+        emb = torch.cat([torch.sin(phases), torch.sin(phases)], dim=1)
         return emb
 
-    def forward(self, t):
+    def forward(self, t, dtype):
         t_emb = self.timestep_embedding(t, self.freq_emb_size)
+        if t_emb.dtype != dtype:
+            t_emb = t_emb.to(dtype)
         t_emb = self.mlp(t_emb)
         return t_emb
 
