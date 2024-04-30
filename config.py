@@ -22,6 +22,8 @@ class Config:
         self.enable_flashattn = False
         self.enable_grad_ckpt = True
 
+        self.use_ema = False
+
         # pretrained vae
         # self.vae_pretrained = "stabilityai/sd-vae-ft-ema"
         # self.vae_scaling_factor = 0.18215
@@ -59,7 +61,7 @@ class Config:
         self.load = None
         self.accum_iter = 4
 
-        self.batch_size = 8
+        self.batch_size = 16
         self.lr = 3e-5
         self.grad_clip = 1.0
 

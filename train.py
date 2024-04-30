@@ -312,15 +312,17 @@ def main():
     )
 
     # 4.2. create ema
-    ema = deepcopy(model).to(torch.float16).to(
-        device)  # use fp16 for now to save VRAM
-    requires_grad(ema, False)
+    if cfg.use_ema:
+        ema = deepcopy(model).to(torch.float16).to(
+            device)  # use fp16 for now to save VRAM
+        requires_grad(ema, False)
 
     # 4.3. move to device
     model = model.to(device, dtype)
     model.train()
-    update_ema(ema, model, decay=0, sharded=False)
-    ema.eval()
+    if cfg.use_ema:
+        update_ema(ema, model, decay=0, sharded=False)
+        ema.eval()
 
     scheduler = IDDPM(timestep_respacing="")
 
@@ -422,7 +424,8 @@ def main():
                 # opt.step()
 
                 # Update EMA
-                update_ema(ema, model, decay=0, sharded=False)
+                if cfg.use_ema:
+                    update_ema(ema, model, decay=0, sharded=False)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -447,10 +450,13 @@ def main():
                     if rank == 0:
                         checkpoint = {
                             "model": model.state_dict(),
-                            "ema": ema.state_dict(),
                             "opt": opt.state_dict(),
                             "cfg": cfg
                         }
+                        if cfg.use_ema:
+                            checkpoint.update({
+                                "ema": ema.state_dict(),
+                            })
                         checkpoint_path = f"{checkpoint_dir}/{global_step:07d}.pt"
                         torch.save(checkpoint, checkpoint_path)
                         logger.info(
