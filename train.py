@@ -15,7 +15,7 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
-from datasets import DatasetFromCSV, get_transforms_video
+from datasets import DatasetFromCSV, PreprocessedDatasetFromCSV, get_transforms_video
 from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
 from models import STDiT
@@ -237,11 +237,17 @@ def main():
         logger = create_logger(None)
 
     # prepare dataset
-    dataset = DatasetFromCSV(cfg.data_path,
-                             num_frames=cfg.num_frames,
-                             frame_interval=cfg.frame_interval,
-                             transform=get_transforms_video(),
-                             root=cfg.root)
+    if cfg.use_preprocessed_data:
+        dataset = PreprocessedDatasetFromCSV(
+            cfg.data_path,
+            root=cfg.root,
+            preprocessed_dir=cfg.preprocessed_dir)
+    else:
+        dataset = DatasetFromCSV(cfg.data_path,
+                                 num_frames=cfg.num_frames,
+                                 frame_interval=cfg.frame_interval,
+                                 transform=get_transforms_video(),
+                                 root=cfg.root)
     sampler = StatefulDistributedSampler(dataset,
                                          num_replicas=dist.get_world_size(),
                                          rank=dist.get_rank(),
@@ -257,20 +263,37 @@ def main():
     total_batch_size = cfg.batch_size * dist.get_world_size() // cfg.sp_size
     logger.info(f"Total batch size: {total_batch_size}")
 
-    # model
-    vae = VideoAutoEncoderKL(cfg.vae_pretrained, cfg.vae_scaling_factor)
+    # default values
+    vae_out_channels = 4
+    text_encoder_output_dim = 4096
     input_size = (cfg.num_frames, *cfg.image_size)
-    latent_size = vae.get_latent_size(input_size)
+    vae_down_factor = [1, 8, 8]
+    latent_size = [input_size[i] // vae_down_factor[i] for i in range(3)]
 
-    text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
-                             model_max_length=cfg.model_max_length,
-                             dtype=torch.float16)
+    # encoders
+    vae = None
+    text_encoder = None
+    if not cfg.use_preprocessed_data:
+        # video VAE
+        vae = VideoAutoEncoderKL(cfg.vae_pretrained,
+                                 cfg.vae_scaling_factor,
+                                 dtype=torch.float16).to(device)
+        vae.eval()
+        latent_size = vae.get_latent_size(input_size)
+        vae_out_channels = vae.out_channels
 
+        # text encoder
+        text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
+                                 model_max_length=cfg.model_max_length,
+                                 dtype=torch.bfloat16)
+        text_encoder_output_dim = text_encoder.output_dim
+
+    # STDiT model
     model = STDiT(
         input_size=latent_size,
-        in_channels=vae.out_channels,
-        caption_channels=text_encoder.output_dim,
-        model_max_length=text_encoder.model_max_length,
+        in_channels=vae_out_channels,
+        caption_channels=text_encoder_output_dim,
+        model_max_length=cfg.model_max_length,
         depth=cfg.depth,
         hidden_size=cfg.hidden_size,
         num_heads=cfg.num_heads,
@@ -292,14 +315,10 @@ def main():
     ema = deepcopy(model).to(torch.float16).to(
         device)  # use fp16 for now to save VRAM
     requires_grad(ema, False)
-    # ema_shape_dict = record_model_param_shape(ema)
 
     # 4.3. move to device
-    vae = vae.to(device, dtype)
     model = model.to(device, dtype)
-
     model.train()
-    vae.eval()
     update_ema(ema, model, decay=0, sharded=False)
     ema.eval()
 
@@ -350,18 +369,22 @@ def main():
         ) as pbar:
 
             for step in pbar:
-                global_step = epoch * num_steps_per_epoch + step
-
                 # step
+                global_step = epoch * num_steps_per_epoch + step
                 batch = next(dataloader_iter)
-                x = batch["video"].to(device, dtype)  # [B, C, T, H, W]
-                y = batch["text"]
 
-                # video and text encoding
-                with torch.no_grad():
-                    x = vae.encode(x)
-                    model_args = text_encoder.encode(y)
-                    # print("input shapes", x.shape, model_args["y"].shape)
+                if cfg.use_preprocessed_data:
+                    x = batch['x'].to(device, dtype)
+                    y = batch['y'].to(device)
+                    mask = batch['mask'].to(device)
+                    model_args = dict(y=y, mask=mask)
+                else:
+                    x = batch["video"].to(device, dtype)  # [B, C, T, H, W]
+                    y = batch["text"]
+                    # video and text encoding
+                    with torch.no_grad():
+                        x = vae.encode(x)
+                        model_args = text_encoder.encode(y)
 
                 # diffusion
                 t = torch.randint(low=0,

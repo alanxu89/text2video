@@ -82,7 +82,54 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         video = video.permute(1, 0, 2, 3)  # C T H W, channel first convention
         # print(f"{t0:.3f}, {time.time() - t0:.3f}")
 
-        return {"video": video, "text": text}
+        return {"video": video, "text": text, "video_id": video_id}
+
+    def __getitem__(self, index):
+        for _ in range(5):
+            try:
+                return self.getitem(index)
+            except Exception as e:
+                print(e)
+                index = np.random.randint(len(self))
+        raise RuntimeError("Too many bad data.")
+
+    def __len__(self):
+        return len(self.samples)
+
+
+class PreprocessedDatasetFromCSV(torch.utils.data.Dataset):
+
+    def __init__(self, csv_path, root=None, preprocessed_dir=None):
+        # import pandas
+        self.samples = []
+        self.csv_path = csv_path
+        self.root = root
+        if not os.path.exists(csv_path) and root is not None:
+            self.csv_path = os.path.join(self.root, csv_path)
+
+        self.preprocessed_dir = preprocessed_dir
+        if not os.path.exists(preprocessed_dir) and root is not None:
+            self.preprocessed_dir = os.path.join(self.root, preprocessed_dir)
+
+        with open(self.csv_path) as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                self.samples.append(row)
+            print(len(self.samples))
+
+    def getitem(self, index):
+        t0 = time.time()
+        video_id, url, duration, page_dir, text = self.samples[index]
+
+        preprocessed_data_path = os.path.join(self.preprocessed_dir,
+                                              f"{video_id}.pt")
+        data = torch.load(preprocessed_data_path)
+        # x = data['x']
+        # y = data['y']
+        # mask = data['mask']
+
+        return data
 
     def __getitem__(self, index):
         for _ in range(5):

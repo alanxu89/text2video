@@ -3,6 +3,10 @@ class Config:
     def __init__(self) -> None:
         self.debug = False
 
+        self.use_preprocessed_data = True
+        self.override_preprocessed = False
+        self.preprocess_batch_size = 8
+
         self.num_frames = 12
         self.frame_interval = 5
         self.image_size = (256, 256)
@@ -32,10 +36,11 @@ class Config:
         # self.root = "/home/ubuntu/Documents/webvid/data/videos"
         # self.data_path = "/home/ubuntu/Downloads/data_train_partitions_0000_4/1.csv"
         self.root = "/mnt/sda/open_sora_plan_data"
+        self.preprocessed_dir = "encoder_out"
         self.data_path = "mixkit.csv"
 
         self.use_image_transform = False
-        self.num_workers = 6
+        self.num_workers = 8
 
         # Define acceleration
         self.dtype = "fp32"
@@ -54,7 +59,7 @@ class Config:
         self.load = None
         self.accum_iter = 4
 
-        self.batch_size = 4
+        self.batch_size = 8
         self.lr = 3e-5
         self.grad_clip = 1.0
 
