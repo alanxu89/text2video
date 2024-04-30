@@ -23,11 +23,15 @@ def auto_grad_checkpoint(module, *args, **kwargs):
     # if getattr(module, "grad_checkpointing", False):
     if not isinstance(module, Iterable):
         # print("checkpoint function")
-        return checkpoint(module, *args, **kwargs)
+        return checkpoint(module, use_reentrant=True, *args, **kwargs)
     # gc_step = module[0].grad_checkpointing_step
     # print("checkpoint sequential")
     gc_step = 1
-    return checkpoint_sequential(module, gc_step, *args, **kwargs)
+    return checkpoint_sequential(module,
+                                 gc_step,
+                                 use_reentrant=True,
+                                 *args,
+                                 **kwargs)
     # print("no checkpoint")
     # return module(*args, **kwargs)
 
