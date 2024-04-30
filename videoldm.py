@@ -379,6 +379,11 @@ if __name__ == "__main__":
     x = torch.randn(n, 4, 64, 64).cuda()
     t = torch.randn(n).cuda()
     cond = torch.randn(n, 32, 768).cuda()
+    import time
     with torch.no_grad():
-        y = model(x, t, cond)
+        t0 = time.time()
+        for _ in range(10):
+            y = model(x, t, cond)
+            print(time.time() - t0)
+        print(time.time() - t0)
     print(y.sample.shape)

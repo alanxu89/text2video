@@ -10,20 +10,25 @@ class VideoAutoEncoderKL(nn.Module):
     def __init__(self,
                  pretrained_model,
                  scaling_factor=0.13025,
+                 dtype=torch.float16,
                  micro_batch_size=None,
                  patch_size=(1, 8, 8),
                  *args,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.image_vae = AutoencoderKL.from_pretrained(
-            pretrained_model, torch_dtype=torch.float16)
+        self.image_vae = AutoencoderKL.from_pretrained(pretrained_model,
+                                                       torch_dtype=dtype)
+        self.dtype = dtype
         self.scaling_factor = scaling_factor
         self.out_channels = self.image_vae.config.latent_channels
         self.micro_batch_size = micro_batch_size
-        self.patch_size = patch_size
+        self.patch_size = patch_size  # down factor f = 2^3 = 8
 
     def encode(self, x):
+        if x.dtype != self.dtype:
+            x = x.to(self.dtype)
+
         b = x.shape[0]
         x = rearrange(x, "B C T H W -> (B T) C H W")
 
