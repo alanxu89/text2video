@@ -11,9 +11,9 @@ class Config:
         self.frame_interval = 5
         self.image_size = (256, 256)
 
-        self.depth = 12
-        self.hidden_size = 768
-        self.num_heads = 12
+        self.depth = 24
+        self.hidden_size = 1024
+        self.num_heads = 16
         self.patch_size = (1, 2, 2)
 
         self.joint_st_attn = True
@@ -61,7 +61,7 @@ class Config:
         self.load = None
         self.accum_iter = 4
 
-        self.batch_size = 16
+        self.batch_size = 8
         self.lr = 3e-5
         self.grad_clip = 1.0
 
