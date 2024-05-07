@@ -135,6 +135,7 @@ def main():
 
             print("decoding...")
             samples = vae.decode(samples)
+            samples = samples * 0.5 + 0.5
             print("done\n")
 
         for idx, sample in enumerate(samples):
