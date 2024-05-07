@@ -141,7 +141,8 @@ def main():
                         saved_data = {
                             "x": x[idx].cpu(),
                             "y": model_args["y"][idx].cpu(),
-                            "mask": model_args["mask"][idx].cpu()
+                            "mask": model_args["mask"][idx].cpu(),
+                            "video_id": vid,
                         }
                         torch.save(saved_data, save_fpath)
 

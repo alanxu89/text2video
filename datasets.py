@@ -128,7 +128,6 @@ class PreprocessedDatasetFromCSV(torch.utils.data.Dataset):
         # x = data['x']
         # y = data['y']
         # mask = data['mask']
-        data['video_id'] = video_id
 
         return data
 
