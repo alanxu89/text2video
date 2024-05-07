@@ -19,10 +19,10 @@ from video_transforms import (
 def get_transforms_video(resolution=256):
     video_trans = transforms.Compose([
         ToTensorVideo(),
-        RandomHorizontalFlipVideo(),
+        # RandomHorizontalFlipVideo(),
         UCFCenterCropVideo(resolution),
         transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                             std=[1.0, 1.0, 1.0],
+                             std=[0.5, 0.5, 0.5],
                              inplace=True),
     ])
 
@@ -128,6 +128,7 @@ class PreprocessedDatasetFromCSV(torch.utils.data.Dataset):
         # x = data['x']
         # y = data['y']
         # mask = data['mask']
+        data['video_id'] = video_id
 
         return data
 
