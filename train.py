@@ -400,6 +400,11 @@ def main():
                         model, x, t, model_args)
                     loss = loss_dict["loss"].mean()
                     loss = loss / cfg.accum_iter
+                    loss_terms = {}
+                    for term in loss_dict:
+                        if term != "loss":
+                            loss_terms[term] = loss_dict[term].mean(
+                            ) / cfg.accum_iter
 
                 # with torch.autograd.detect_anomaly():
                 scaler.scale(loss).backward()
@@ -429,6 +434,8 @@ def main():
 
                 # Log loss values:
                 all_reduce_mean(loss)
+                for term in loss_terms:
+                    all_reduce_mean(loss_terms[term])
                 running_loss += loss.item()
                 log_step += 1
 
@@ -443,6 +450,9 @@ def main():
                     running_loss = 0
                     log_step = 0
                     writer.add_scalar("loss", loss.item(), global_step)
+                    for term in loss_terms:
+                        writer.add_scalar(term, loss_terms[term].item(),
+                                          global_step)
 
                 # Save checkpoint
                 if cfg.ckpt_every > 0 and (global_step +
