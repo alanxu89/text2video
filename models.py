@@ -326,6 +326,9 @@ class STDiT(nn.Module):
                                          self.patch_size_nd,
                                          out_channels=self.out_channels)
 
+        self.initialize_weights()
+        self.initialize_temporal()
+
     def forward(self, x, t, y, mask=None):
         """
         Args:
@@ -441,3 +444,40 @@ class STDiT(nn.Module):
         )
         pos_embed = torch.from_numpy(pos_embed).float().unsqueeze(0)
         return pos_embed
+
+    def initialize_temporal(self):
+        for block in self.blocks:
+            nn.init.constant_(block.t_attn.proj.weight, 0)
+            nn.init.constant_(block.t_attn.proj.bias, 0)
+
+    def initialize_weights(self):
+        # Initialize transformer layers:
+        def _basic_init(module):
+            if isinstance(module, nn.Linear):
+                torch.nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+
+        self.apply(_basic_init)
+
+        # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
+        w = self.x_embedder.proj.weight.data
+        nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+        nn.init.normal_(self.t_block[1].weight, std=0.02)
+
+        # Initialize caption embedding MLP:
+        nn.init.normal_(self.y_embedder.y_proj.fc1.weight, std=0.02)
+        nn.init.normal_(self.y_embedder.y_proj.fc2.weight, std=0.02)
+
+        # Zero-out adaLN modulation layers in PixArt blocks:
+        for block in self.blocks:
+            nn.init.constant_(block.cross_attn.proj.weight, 0)
+            nn.init.constant_(block.cross_attn.proj.bias, 0)
+
+        # Zero-out output layers:
+        nn.init.constant_(self.final_layer.linear.weight, 0)
+        nn.init.constant_(self.final_layer.linear.bias, 0)
