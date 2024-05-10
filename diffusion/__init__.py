@@ -91,9 +91,9 @@ def forward_with_cfg(model, x, t, y, cfg_scale, cfg_channels=None, **kwargs):
     combined = torch.cat([half, half], dim=0)
     model_out = model.forward(combined, t, y, **kwargs)
     model_out = model_out["x"] if isinstance(model_out, dict) else model_out
-
     if cfg_channels is None:
-        cfg_channels = model_out.shape[1] // 2
+        # cfg_channels = model_out.shape[1] // 2
+        cfg_channels = 3
 
     # For exact reproducibility reasons, we apply classifier-free guidance on only
     # three channels by default. The standard approach to cfg applies it to all channels.
