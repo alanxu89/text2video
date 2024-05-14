@@ -313,9 +313,8 @@ def main():
 
     # 4.2. create ema
     if cfg.use_ema:
-        ema = deepcopy(model).to(torch.float16).to(
-            device)  # use fp16 for now to save VRAM
-        requires_grad(ema, False)
+        ema = deepcopy(model).to(device)
+        # requires_grad(ema, False)
 
     # 4.3. move to device
     model = model.to(device, dtype)
@@ -377,7 +376,7 @@ def main():
 
                 if cfg.use_preprocessed_data:
                     x = batch['x'].to(device, dtype)
-                    y = batch['y'].to(device)
+                    y = batch['y'].to(device, dtype)
                     mask = batch['mask'].to(device)
                     model_args = dict(y=y, mask=mask)
                 else:
@@ -430,7 +429,7 @@ def main():
 
                 # Update EMA
                 if cfg.use_ema:
-                    update_ema(ema, model, decay=0, sharded=False)
+                    update_ema(ema, model)
 
                 # Log loss values:
                 all_reduce_mean(loss)
