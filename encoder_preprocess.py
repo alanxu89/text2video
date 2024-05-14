@@ -89,12 +89,12 @@ def main():
     # video VAE
     vae = VideoAutoEncoderKL(cfg.vae_pretrained,
                              cfg.vae_scaling_factor,
-                             dtype=torch.float16)
+                             dtype=dtype)
 
     # text encoder
     text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
                              model_max_length=cfg.model_max_length,
-                             dtype=torch.bfloat16)
+                             dtype=dtype)
 
     # 4.3. move to device
     vae = vae.to(device)
@@ -123,7 +123,12 @@ def main():
             # step
             batch = next(dataloader_iter)
             x = batch["video"].to(device, dtype)  # [B, C, T, H, W]
-            y = batch["text"]
+            if cfg.use_vid_as_text:
+                y = batch["video_id"]
+                # 'mixkit-active-volcano-smoking-at-night-4427_004' to 'active volcano smoking at night'
+                y = [' '.join(text.split('-')[1:-1]) for text in y]
+            else:
+                y = batch["text"]
             video_id = batch["video_id"]
 
             # video and text encoding
