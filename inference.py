@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 
 import torch
 import torch.distributed as dist
@@ -20,14 +21,14 @@ def load_prompts(prompt_path):
     return prompts
 
 
-def load_checkpoint(model, ckpt_path, save_as_pt=True):
+def load_checkpoint(model, ckpt_path, model_name="ema", save_as_pt=True):
     if ckpt_path.endswith(".pt") or ckpt_path.endswith(".pth"):
         assert os.path.isfile(
             ckpt_path), f"Could not find DiT checkpoint at {ckpt_path}"
         checkpoint = torch.load(ckpt_path,
                                 map_location=lambda storage, loc: storage)
         missing_keys, unexpected_keys = model.load_state_dict(
-            checkpoint['ema'], strict=False)
+            checkpoint[model_name], strict=False)
         print(f"Missing keys: {missing_keys}")
         print(f"Unexpected keys: {unexpected_keys}")
     else:
@@ -76,13 +77,14 @@ def main():
     # model
     vae = VideoAutoEncoderKL(cfg.vae_pretrained,
                              cfg.vae_scaling_factor,
-                             micro_batch_size=8)
+                             micro_batch_size=8,
+                             dtype=dtype)
     input_size = (cfg.num_frames, *cfg.image_size)
     latent_size = vae.get_latent_size(input_size)
 
     text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
                              model_max_length=cfg.model_max_length,
-                             dtype=torch.float16)
+                             dtype=dtype)
 
     model = STDiT(
         input_size=latent_size,
@@ -97,17 +99,17 @@ def main():
         use_3dconv=cfg.use_3dconv,
         enable_mem_eff_attn=cfg.enable_mem_eff_attn,
         enable_flashattn=cfg.enable_flashattn,
-        enable_grad_checkpoint=cfg.enable_grad_ckpt,
+        enable_grad_checkpoint=False,
         debug=cfg.debug,
     )
+    load_checkpoint(model, cfg.ckpt_path, model_name="ema")
     text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
 
     # 4.3. move to device
-    vae = vae.to(device, dtype).eval()
-    model = model.to(device, dtype).eval()
-    load_checkpoint(model, cfg.ckpt_path)
+    vae = vae.to(device).eval()
+    model = model.to(device).eval()
 
-    scheduler = IDDPM(timestep_respacing="")
+    scheduler = IDDPM(num_sampling_steps=250, cfg_scale=4.0)
 
     model_args = dict()
 
@@ -115,9 +117,10 @@ def main():
     # 4. inference
     # ======================================================
 
-    prompts = load_prompts("assets/texts/mixkit_test_prompts.txt")
+    prompts = load_prompts("assets/texts/mixkit_test_prompts2.txt")
     sample_idx = 0
-    save_dir = cfg.save_dir
+    save_dir = os.path.join(cfg.save_dir,
+                            datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
     os.makedirs(save_dir, exist_ok=True)
     for i in range(0, len(prompts), cfg.batch_size):
         batch_prompts = prompts[i:i + cfg.batch_size]
@@ -134,6 +137,12 @@ def main():
             )
 
             print("decoding...")
+            torch.save(samples, os.path.join(save_dir, "latents.pt"))
+
+            for j in range(len(batch_prompts)):
+                save_sample(samples[j, :3, :1],
+                            save_path=os.path.join(save_dir, "latents_" +
+                                                   str(j) + "_t0"))
             samples = vae.decode(samples)
             samples = samples * 0.5 + 0.5
             print("done\n")
@@ -141,7 +150,11 @@ def main():
         for idx, sample in enumerate(samples):
             print(f"Prompt:\n {batch_prompts[idx]}")
             save_path = os.path.join(save_dir, f"sample_{sample_idx}")
-            save_sample(sample, fps=6, save_path=save_path)
+            save_sample(sample, fps=6, save_path=save_path, normalize=False)
+            save_sample(sample[:, :1],
+                        save_path=save_path + "_t0",
+                        normalize=False)
+
             sample_idx += 1
 
 
