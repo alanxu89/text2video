@@ -123,13 +123,8 @@ def main():
             # step
             batch = next(dataloader_iter)
             x = batch["video"].to(device, dtype)  # [B, C, T, H, W]
-            if cfg.use_vid_as_text:
-                y = batch["video_id"]
-                # 'mixkit-active-volcano-smoking-at-night-4427_004' to 'active volcano smoking at night'
-                y = [' '.join(text.split('-')[1:-1]) for text in y]
-            else:
-                y = batch["text"]
-            video_id = batch["video_id"]
+            y = batch[cfg.text_key]
+            video_ids = batch["video_id"]
 
             # video and text encoding
             with torch.no_grad():
@@ -137,8 +132,8 @@ def main():
                 model_args = text_encoder.encode(y)
 
                 # if encode only, we save results to file
-                for idx in range(len(video_id)):
-                    vid = video_id[idx]
+                for idx in range(len(video_ids)):
+                    vid = video_ids[idx]
                     save_dir = os.path.join(cfg.root, cfg.preprocessed_dir)
                     save_fpath = os.path.join(save_dir, vid + ".pt")
                     if not os.path.exists(

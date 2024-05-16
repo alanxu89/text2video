@@ -63,6 +63,10 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         if self.root:
             path = os.path.join(self.root, page_dir, f"{video_id}.mp4")
 
+        # 'mixkit-active-volcano-smoking-at-night-4427_004' to 'active volcano smoking at night'
+        short_text = ' '.join(video_id.split('-')[1:-1])
+        video_category = page_dir.split("/")[-1]
+
         vframes, aframes, info = torchvision.io.read_video(
             filename=path, pts_unit="sec", output_format="TCHW")
 
@@ -82,7 +86,13 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         video = video.permute(1, 0, 2, 3)  # C T H W, channel first convention
         # print(f"{t0:.3f}, {time.time() - t0:.3f}")
 
-        return {"video": video, "text": text, "video_id": video_id}
+        return {
+            "video": video,
+            "text": text,
+            "short_text": short_text,
+            "category": video_category,
+            "video_id": video_id,
+        }
 
     def __getitem__(self, index):
         for _ in range(5):
