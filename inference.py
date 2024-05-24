@@ -117,7 +117,7 @@ def main():
     # 4. inference
     # ======================================================
 
-    prompts = load_prompts("assets/texts/mixkit_test_prompts2.txt")
+    prompts = load_prompts("assets/texts/mixkit_test_prompts4.txt")
     sample_idx = 0
     save_dir = os.path.join(cfg.save_dir,
                             datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
