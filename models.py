@@ -272,6 +272,7 @@ class STDiT(nn.Module):
                                        in_chans=in_channels,
                                        embed_dim=hidden_size)
         self.t_embedder = TimestepEmbedder(hidden_size=hidden_size)
+        # a shared adaLN for all blocks
         self.t_block = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True),
@@ -467,7 +468,9 @@ class STDiT(nn.Module):
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
-        nn.init.normal_(self.t_block[1].weight, std=0.02)
+        # zero-out adaLN for timestep
+        nn.init.constant_(self.t_block[-1].weight, 0)
+        nn.init.constant_(self.t_block[-1].bias, 0)
 
         # Initialize caption embedding MLP:
         nn.init.normal_(self.y_embedder.y_proj.fc1.weight, std=0.02)
