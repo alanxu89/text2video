@@ -5,13 +5,13 @@ class Config:
 
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
-        self.preprocessed_dir = "encoder_out_05"
+        self.preprocessed_dir = "encoder_out_07"
         self.text_key = "short_text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
 
-        self.num_frames = 16
-        self.frame_interval = 4
+        self.num_frames = 4
+        self.frame_interval = 2
         self.image_size = (256, 256)
 
         # self.depth = 24
@@ -23,6 +23,7 @@ class Config:
 
         self.patch_size = (1, 2, 2)
 
+        self.enable_temporal_attn = False
         self.joint_st_attn = False
         self.use_3dconv = False
         self.enable_mem_eff_attn = True
@@ -62,15 +63,15 @@ class Config:
         self.outputs = "outputs"
         self.wandb = False
 
-        self.epochs = 150
-        self.log_every = 2
-        self.ckpt_every = 4000
+        self.epochs = 3000
+        self.log_every = 1
+        self.ckpt_every = 5000
         self.load = None
-        self.accum_iter = 4
+        self.accum_iter = 1
 
-        self.batch_size = 32
-        self.lr = 6e-5
+        self.batch_size = 128
+        self.lr = 8e-5
         self.grad_clip = 1.0
 
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "outputs/015/checkpoints/0023999.pt"
+        self.ckpt_path = "outputs/025/checkpoints/0004999.pt"
