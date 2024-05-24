@@ -29,6 +29,21 @@ def get_transforms_video(resolution=256):
     return video_trans
 
 
+def get_row_filter(filter_type: int):
+
+    def func(row):
+        return True
+
+    def func1(row):
+        data_category = row[3]
+        return data_category == "mixkit/beach"
+
+    if filter_type == 1:
+        return func1
+    else:
+        return func
+
+
 class DatasetFromCSV(torch.utils.data.Dataset):
 
     def __init__(self,
@@ -36,7 +51,8 @@ class DatasetFromCSV(torch.utils.data.Dataset):
                  num_frames=16,
                  frame_interval=1,
                  transform=None,
-                 root=None):
+                 root=None,
+                 data_filter=1):
         # import pandas
         self.samples = []
         self.csv_path = csv_path
@@ -44,11 +60,13 @@ class DatasetFromCSV(torch.utils.data.Dataset):
         if not os.path.exists(csv_path) and root is not None:
             self.csv_path = os.path.join(self.root, csv_path)
 
+        row_filter = get_row_filter(data_filter)
         with open(self.csv_path) as f:
             reader = csv.reader(f)
             next(reader)
             for row in reader:
-                self.samples.append(row)
+                if row_filter(row):
+                    self.samples.append(row)
             print(len(self.samples))
 
         self.transform = transform
@@ -72,8 +90,9 @@ class DatasetFromCSV(torch.utils.data.Dataset):
 
         # Sampling video frames
         total_frames = len(vframes)
-        start_frame_ind = random.randint(0,
-                                         total_frames - self.num_real_frames)
+        # start_frame_ind = random.randint(0,
+        #                                  total_frames - self.num_real_frames)
+        start_frame_ind = 0
         end_frame_ind = start_frame_ind + self.num_real_frames
         frame_indice = np.arange(start_frame_ind,
                                  end_frame_ind,
@@ -109,10 +128,16 @@ class DatasetFromCSV(torch.utils.data.Dataset):
 
 class PreprocessedDatasetFromCSV(torch.utils.data.Dataset):
 
-    def __init__(self, csv_path, root=None, preprocessed_dir=None):
+    def __init__(self,
+                 csv_path,
+                 num_frames=None,
+                 root=None,
+                 preprocessed_dir=None,
+                 data_filter=1):
         # import pandas
         self.samples = []
         self.csv_path = csv_path
+        self.num_frames = num_frames
         self.root = root
         if not os.path.exists(csv_path) and root is not None:
             self.csv_path = os.path.join(self.root, csv_path)
@@ -121,11 +146,13 @@ class PreprocessedDatasetFromCSV(torch.utils.data.Dataset):
         if not os.path.exists(preprocessed_dir) and root is not None:
             self.preprocessed_dir = os.path.join(self.root, preprocessed_dir)
 
+        row_filter = get_row_filter(data_filter)
         with open(self.csv_path) as f:
             reader = csv.reader(f)
             next(reader)
             for row in reader:
-                self.samples.append(row)
+                if row_filter(row):
+                    self.samples.append(row)
             print(len(self.samples))
 
     def getitem(self, index):
@@ -135,9 +162,11 @@ class PreprocessedDatasetFromCSV(torch.utils.data.Dataset):
         preprocessed_data_path = os.path.join(self.preprocessed_dir,
                                               f"{video_id}.pt")
         data = torch.load(preprocessed_data_path)
-        # x = data['x']
+        # x = data['x'] # C T H W, channel first convention
         # y = data['y']
         # mask = data['mask']
+        if self.num_frames is not None:
+            data['x'] = data['x'][:, :self.num_frames]
 
         return data
 
