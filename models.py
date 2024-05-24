@@ -50,6 +50,7 @@ class STDiTBlock(nn.Module):
         d_s_w=16,
         mlp_ratio=4.0,
         drop_path=0.0,
+        enable_temporal_attn=True,
         joint_st_attn=False,
         use_3dconv=False,
         enable_mem_eff_attn=False,
@@ -64,6 +65,7 @@ class STDiTBlock(nn.Module):
 
         self.hidden_size = hidden_size
         self.enable_flashattn = enable_flashattn
+        self.enable_temporal_attn = enable_temporal_attn
         self.joint_st_attn = joint_st_attn
         self.d_s = d_s
         self.d_t = d_t
@@ -154,51 +156,55 @@ class STDiTBlock(nn.Module):
         self.debugprint(x.shape)
 
         # temporal branch
-        self.debugprint("temporal branch")
-        self.debugprint(x.shape)
-        x_t = rearrange(x, "b (t s) c -> (b s) t c", t=self.d_t, s=self.d_s)
-        self.debugprint(x_t.shape)
-        if tpe is not None:
-            self.debugprint("tpe shape:", tpe.shape)
-            x_t = x_t + tpe
-        if self.joint_st_attn:
-            # joint spatial-temporal with a finite window size
-            if self.use_3dconv:
-                self.debugprint("use conv3D")
-                # rearange and then apply conv
-                x_t = rearrange(x_t,
-                                "(b s_h s_w) t c -> b c t s_h s_w",
-                                t=self.d_t,
-                                s_h=self.d_s_h,
-                                s_w=self.d_s_w)
-                self.debugprint(x_t.shape)
-                x_t = self.conv1(x_t)
-                self.debugprint(x_t.shape)
-                x_t = self.conv2(x_t)
-                self.debugprint(x_t.shape)
-                x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
-                self.debugprint(x_t.shape)
+        if self.enable_temporal_attn:
+            self.debugprint("temporal branch")
+            self.debugprint(x.shape)
+            x_t = rearrange(x,
+                            "b (t s) c -> (b s) t c",
+                            t=self.d_t,
+                            s=self.d_s)
+            self.debugprint(x_t.shape)
+            if tpe is not None:
+                self.debugprint("tpe shape:", tpe.shape)
+                x_t = x_t + tpe
+            if self.joint_st_attn:
+                # joint spatial-temporal with a finite window size
+                if self.use_3dconv:
+                    self.debugprint("use conv3D")
+                    # rearange and then apply conv
+                    x_t = rearrange(x_t,
+                                    "(b s_h s_w) t c -> b c t s_h s_w",
+                                    t=self.d_t,
+                                    s_h=self.d_s_h,
+                                    s_w=self.d_s_w)
+                    self.debugprint(x_t.shape)
+                    x_t = self.conv1(x_t)
+                    self.debugprint(x_t.shape)
+                    x_t = self.conv2(x_t)
+                    self.debugprint(x_t.shape)
+                    x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
+                    self.debugprint(x_t.shape)
+                else:
+                    self.debugprint("use self-attn")
+                    # rearange and then apply attention
+                    x_t = rearrange(x_t,
+                                    "(b s) t c -> b (t s) c",
+                                    t=self.d_t,
+                                    s=self.d_s)
+                    self.debugprint(x_t.shape)
+                    x_t = self.t_attn(x_t, st_attn_bias)
             else:
-                self.debugprint("use self-attn")
-                # rearange and then apply attention
+                # temporal-only attention
+                # apply attention and then rearange
+                x_t = self.t_attn(x_t)
+                self.debugprint(x_t.shape)
                 x_t = rearrange(x_t,
                                 "(b s) t c -> b (t s) c",
                                 t=self.d_t,
                                 s=self.d_s)
-                self.debugprint(x_t.shape)
-                x_t = self.t_attn(x_t, st_attn_bias)
-        else:
-            # temporal-only attention
-            # apply attention and then rearange
-            x_t = self.t_attn(x_t)
             self.debugprint(x_t.shape)
-            x_t = rearrange(x_t,
-                            "(b s) t c -> b (t s) c",
-                            t=self.d_t,
-                            s=self.d_s)
-        self.debugprint(x_t.shape)
-        x = x + self.drop_path(gate_msa * x_t)
-        self.debugprint(x.shape)
+            x = x + self.drop_path(gate_msa * x_t)
+            self.debugprint(x.shape)
 
         # cross attention
         self.debugprint("cross attn")
@@ -235,6 +241,7 @@ class STDiT(nn.Module):
         space_scale=1.0,
         time_scale=1.0,
         freeze=None,
+        enable_temporal_attn=True,
         joint_st_attn=False,
         use_3dconv=False,
         enable_mem_eff_attn=False,
@@ -301,6 +308,7 @@ class STDiT(nn.Module):
                 d_s_w=self.num_spatial_w,
                 mlp_ratio=mlp_ratio,
                 drop_path=drop_path[i],
+                enable_temporal_attn=enable_temporal_attn,
                 joint_st_attn=joint_st_attn,
                 use_3dconv=use_3dconv,
                 enable_mem_eff_attn=enable_mem_eff_attn,

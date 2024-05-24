@@ -1,4 +1,5 @@
 import os
+import time
 from glob import glob
 from typing import Tuple, Optional
 from copy import deepcopy
@@ -298,6 +299,7 @@ def main():
         hidden_size=cfg.hidden_size,
         num_heads=cfg.num_heads,
         patch_size=cfg.patch_size,
+        enable_temporal_attn=cfg.enable_temporal_attn,
         joint_st_attn=cfg.joint_st_attn,
         use_3dconv=cfg.use_3dconv,
         enable_mem_eff_attn=cfg.enable_mem_eff_attn,
@@ -370,6 +372,7 @@ def main():
         ) as pbar:
 
             for step in pbar:
+                t0 = time.time()
                 # step
                 global_step = epoch * num_steps_per_epoch + step
                 batch = next(dataloader_iter)
@@ -386,7 +389,7 @@ def main():
                     with torch.no_grad():
                         x = vae.encode(x)
                         model_args = text_encoder.encode(y)
-
+                t1 = time.time()
                 # diffusion
                 t = torch.randint(low=0,
                                   high=scheduler.num_timesteps,
@@ -426,6 +429,8 @@ def main():
 
                 # loss.backward()
                 # opt.step()
+
+                # print(t1 - t0, time.time() - t1)
 
                 # Update EMA
                 if cfg.use_ema:
