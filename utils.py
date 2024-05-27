@@ -105,3 +105,18 @@ def get_attn_bias_from_mask(mask: torch.Tensor):
     not_mask = torch.logical_not(mask)
     bias = torch.zeros(not_mask.shape).masked_fill(not_mask, float("-inf"))
     return bias
+
+
+def readtexts_from_file(fpath):
+    texts = []
+    with open(fpath) as f:
+        # option 1
+        # texts = f.readlines()
+
+        # option 2
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            texts.append(line)
+    return texts

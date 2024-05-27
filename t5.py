@@ -32,6 +32,7 @@ from bs4 import BeautifulSoup
 from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer, T5EncoderModel
 
+from utils import readtexts_from_file
 # from opensora.registry import MODELS
 
 
@@ -292,21 +293,6 @@ class T5Encoder:
     def null(self, n):
         null_y = self.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None]
         return null_y
-
-
-def readtexts_from_file(fpath):
-    texts = []
-    with open(fpath) as f:
-        # option 1
-        # texts = f.readlines()
-
-        # option 2
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            texts.append(line)
-    return texts
 
 
 if __name__ == "__main__":
