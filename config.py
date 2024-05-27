@@ -5,7 +5,7 @@ class Config:
 
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
-        self.preprocessed_dir = "encoder_out_07"
+        self.preprocessed_dir = "encoder_out_08"
         self.text_key = "short_text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
@@ -39,9 +39,12 @@ class Config:
         self.vae_scaling_factor = 0.13025
 
         # text encoder
-        self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"
+        # self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"
         # self.model_max_length = 512
-        self.model_max_length = 32
+        # self.text_encoder_output_dim = 4096
+        self.textenc_pretrained = "runwayml/stable-diffusion-v1-5"
+        self.model_max_length = 77
+        self.text_encoder_output_dim = 768
 
         # Define dataset
         # self.root = "/home/ubuntu/Documents/webvid/data/videos"
