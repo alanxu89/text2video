@@ -17,6 +17,7 @@ import torch.distributed as dist
 from datasets import DatasetFromCSV, get_transforms_video
 from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
+from clip import ClipEncoder
 from config import Config
 
 
@@ -92,9 +93,14 @@ def main():
                              dtype=dtype)
 
     # text encoder
-    text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
-                             model_max_length=cfg.model_max_length,
-                             dtype=dtype)
+    if "t5" in cfg.textenc_pretrained:
+        text_encoder_cls = T5Encoder
+    elif ("stable-diffusion" in cfg.textenc_pretrained
+          or "sd" in cfg.textenc_pretrained):
+        text_encoder_cls = ClipEncoder
+    text_encoder = text_encoder_cls(from_pretrained=cfg.textenc_pretrained,
+                                    model_max_length=cfg.model_max_length,
+                                    dtype=dtype)
 
     # 4.3. move to device
     vae = vae.to(device)

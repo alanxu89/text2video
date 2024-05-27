@@ -19,6 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from datasets import DatasetFromCSV, PreprocessedDatasetFromCSV, get_transforms_video
 from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
+from clip import ClipEncoder
 from models import STDiT
 from diffusion import IDDPM
 from config import Config
@@ -266,7 +267,7 @@ def main():
 
     # default values
     vae_out_channels = 4
-    text_encoder_output_dim = 4096
+    text_encoder_output_dim = cfg.text_encoder_output_dim
     input_size = (cfg.num_frames, *cfg.image_size)
     vae_down_factor = [1, 8, 8]
     latent_size = [input_size[i] // vae_down_factor[i] for i in range(3)]
@@ -284,9 +285,15 @@ def main():
         vae_out_channels = vae.out_channels
 
         # text encoder
-        text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
-                                 model_max_length=cfg.model_max_length,
-                                 dtype=torch.bfloat16)
+        if "t5" in cfg.textenc_pretrained:
+            text_encoder_cls = T5Encoder
+        elif ("stable-diffusion" in cfg.textenc_pretrained
+              or "sd" in cfg.textenc_pretrained):
+            text_encoder_cls = ClipEncoder
+        text_encoder = text_encoder_cls(from_pretrained=cfg.textenc_pretrained,
+                                        model_max_length=cfg.model_max_length,
+                                        dtype=dtype)
+
         text_encoder_output_dim = text_encoder.output_dim
 
     # STDiT model
