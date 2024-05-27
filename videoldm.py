@@ -359,31 +359,32 @@ class VideoLDM(UNet2DConditionModel):
 
 
 if __name__ == "__main__":
-    model = VideoLDM.from_pretrained('CompVis/stable-diffusion-v1-4',
+    model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
                                      subfolder='unet',
                                      low_cpu_mem_usage=False).cuda()
+
     for name, param in model.named_parameters():
         if not ("conv_3ds" in name or "temp_attns" in name):
-            print(name, param.shape)
             param.requires_grad = False
-    print("\n\n\n")
+    print("\n\n")
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(name, param.shape)
-    # model.eval()
+    model.eval()
 
-    B = 2
+    B = 4
     T = 8
     n = B * T
 
     x = torch.randn(n, 4, 64, 64).cuda()
     t = torch.randn(n).cuda()
-    cond = torch.randn(n, 32, 768).cuda()
+    cond = torch.randn(n, 77, 768).cuda()
     import time
     with torch.no_grad():
-        t0 = time.time()
-        for _ in range(10):
+        y = model(x, t, cond)
+        y = model(x, t, cond)
+        for _ in range(5):
+            t0 = time.time()
             y = model(x, t, cond)
             print(time.time() - t0)
-        print(time.time() - t0)
     print(y.sample.shape)

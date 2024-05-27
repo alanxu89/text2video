@@ -9,10 +9,11 @@ from diffusers.models.unets.unet_2d_blocks import (
     DownBlock2D,
     UpBlock2D,
 )
+from diffusers.models.attention_processor import Attention
 
 from einops import rearrange
 
-from blocks import get_1d_sincos_pos_embed, Attention, MultiHeadCrossAttention
+from blocks import get_1d_sincos_pos_embed
 
 
 def get_down_block(
@@ -226,12 +227,9 @@ class TemporalAttention(nn.Module):
             get_1d_sincos_pos_embed(dim, length=n_frames)),
                                     requires_grad=False)
 
-        if kv_dim is None:
-            self.attn = Attention(dim, num_heads=n_heads)
-        else:
-            self.attn = MultiHeadCrossAttention(dim,
-                                                num_heads=n_heads,
-                                                d_kv=kv_dim)
+        self.attn = Attention(query_dim=dim,
+                              heads=n_heads,
+                              cross_attention_dim=kv_dim)
 
         self.alpha = nn.Parameter(torch.ones(1))
 
