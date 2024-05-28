@@ -11,6 +11,8 @@ from diffusers.configuration_utils import register_to_config
 
 from videoldm_blocks import get_down_block, get_up_block
 
+from config import Config
+
 
 class VideoLDM(UNet2DConditionModel):
 
@@ -78,6 +80,8 @@ class VideoLDM(UNet2DConditionModel):
         addition_embed_type_num_heads: int = 64,
     ):
         super().__init__()
+
+        self.cfg = Config()
 
         self.sample_size = sample_size
 
@@ -219,6 +223,8 @@ class VideoLDM(UNet2DConditionModel):
             is_final_block = i == len(block_out_channels) - 1
 
             down_block = get_down_block(
+                self.cfg.num_frames,
+                self.cfg.num_temp_heads,
                 down_block_type,
                 num_layers=layers_per_block[i],
                 transformer_layers_per_block=transformer_layers_per_block[i],
@@ -303,6 +309,8 @@ class VideoLDM(UNet2DConditionModel):
                 add_upsample = False
 
             up_block = get_up_block(
+                self.cfg.num_frames,
+                self.cfg.num_temp_heads,
                 up_block_type,
                 num_layers=reversed_layers_per_block[i] + 1,
                 transformer_layers_per_block=
@@ -361,30 +369,34 @@ class VideoLDM(UNet2DConditionModel):
 if __name__ == "__main__":
     model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
                                      subfolder='unet',
-                                     low_cpu_mem_usage=False).cuda()
+                                     low_cpu_mem_usage=False,
+                                     torch_dtype=torch.float16).cuda()
 
     for name, param in model.named_parameters():
         if not ("conv_3ds" in name or "temp_attns" in name):
             param.requires_grad = False
+    model.train()
+
     print("\n\n")
+
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(name, param.shape)
-    model.eval()
 
-    B = 4
-    T = 8
+    B = 2
+    T = 4
     n = B * T
 
-    x = torch.randn(n, 4, 64, 64).cuda()
-    t = torch.randn(n).cuda()
-    cond = torch.randn(n, 77, 768).cuda()
+    x = torch.randn(n, 4, 32, 32).cuda().half()
+    t = torch.randn(n).cuda().half()
+    cond = torch.randn(n, 77, 768).cuda().half()
     import time
-    with torch.no_grad():
+    # with torch.no_grad():
+    y = model(x, t, cond)
+    y = model(x, t, cond)
+    for _ in range(5):
+        t0 = time.time()
         y = model(x, t, cond)
-        y = model(x, t, cond)
-        for _ in range(5):
-            t0 = time.time()
-            y = model(x, t, cond)
-            print(time.time() - t0)
+        print(time.time() - t0)
+        time.sleep(2)
     print(y.sample.shape)

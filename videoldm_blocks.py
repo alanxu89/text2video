@@ -17,6 +17,8 @@ from blocks import get_1d_sincos_pos_embed
 
 
 def get_down_block(
+    n_frames: int,
+    n_temp_heads: int,
     down_block_type: str,
     num_layers: int,
     in_channels: int,
@@ -72,6 +74,8 @@ def get_down_block(
                 "cross_attention_dim must be specified for CrossAttnDownBlock2D"
             )
         return VLDMCrossAttnDownBlock(
+            n_frames=n_frames,
+            n_temp_heads=n_temp_heads,
             num_layers=num_layers,
             transformer_layers_per_block=transformer_layers_per_block,
             in_channels=in_channels,
@@ -97,6 +101,8 @@ def get_down_block(
 
 
 def get_up_block(
+    n_frames: int,
+    n_temp_heads: int,
     up_block_type: str,
     num_layers: int,
     in_channels: int,
@@ -153,6 +159,8 @@ def get_up_block(
             raise ValueError(
                 "cross_attention_dim must be specified for CrossAttnUpBlock2D")
         return VLDMCrossAttnUpBlock2D(
+            n_frames=n_frames,
+            n_temp_heads=n_temp_heads,
             num_layers=num_layers,
             transformer_layers_per_block=transformer_layers_per_block,
             in_channels=in_channels,
@@ -204,6 +212,8 @@ class Conv3DLayer(nn.Module):
         self.alpha = nn.Parameter(torch.ones(1))
 
     def forward(self, x):
+        # x shape: [b*t, c, h, w]
+
         h = rearrange(x, '(b t) c h w -> b c t h w', t=self.n_frames)
         h = self.block1(h)
         h = self.block2(h)
@@ -227,6 +237,7 @@ class TemporalAttention(nn.Module):
             get_1d_sincos_pos_embed(dim, length=n_frames)),
                                     requires_grad=False)
 
+        # print("TemporalAttention", dim, n_frames, n_heads)
         self.attn = Attention(query_dim=dim,
                               heads=n_heads,
                               cross_attention_dim=kv_dim)
@@ -234,6 +245,9 @@ class TemporalAttention(nn.Module):
         self.alpha = nn.Parameter(torch.ones(1))
 
     def forward(self, x, y):
+        # x shape: [b*t, cx, h, w]
+        # y shape: [b*t, n, cy]
+
         skip = x
         bt, c, h, w = x.shape
 

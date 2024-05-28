@@ -14,6 +14,9 @@ class Config:
         self.frame_interval = 2
         self.image_size = (256, 256)
 
+        # for video ldm temporal layers
+        self.num_temp_heads = 8
+
         # self.depth = 24
         # self.hidden_size = 1024
         # self.num_heads = 16
