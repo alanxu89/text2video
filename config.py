@@ -40,8 +40,12 @@ class Config:
         # pretrained vae
         # self.vae_pretrained = "stabilityai/sd-vae-ft-ema"
         # self.vae_scaling_factor = 0.18215
-        self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
-        self.vae_scaling_factor = 0.13025
+        # self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
+        # self.vae_scaling_factor = 0.13025
+        self.vae_pretrained = "runwayml/stable-diffusion-v1-5"
+        self.subfolder = "vae"
+        self.vae_scaling_factor = 0.18215
+
 
         # text encoder
         # self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"

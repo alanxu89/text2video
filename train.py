@@ -279,6 +279,7 @@ def main():
     if not cfg.use_preprocessed_data:
         # video VAE
         vae = VideoAutoEncoderKL(cfg.vae_pretrained,
+                                 cfg.subfolder,
                                  cfg.vae_scaling_factor,
                                  dtype=torch.float16).to(device)
         vae.eval()
@@ -405,8 +406,11 @@ def main():
                     with torch.no_grad():
                         x = vae.encode(x)
                         model_args = text_encoder.encode(y)
+
                 if cfg.use_videoldm:
-                    x = x.permute(0, 2, 1, 3, 4).reshape(-1, 4, 32, 32)
+                    # =? [B, T, C, H, W] => [B*T, C, H, W]
+                    chw = x.shape[-3:]
+                    x = x.permute(0, 2, 1, 3, 4).reshape(-1, *chw)
                     y = y.squeeze().repeat(cfg.num_frames, 1, 1)
                     mask = mask.repeat(cfg.num_frames, 1)
                     model_args = dict(encoder_hidden_states=y,

@@ -89,6 +89,7 @@ def main():
 
     # video VAE
     vae = VideoAutoEncoderKL(cfg.vae_pretrained,
+                             cfg.subfolder,
                              cfg.vae_scaling_factor,
                              dtype=dtype)
 
