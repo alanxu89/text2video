@@ -14,6 +14,8 @@ class Config:
         self.frame_interval = 2
         self.image_size = (256, 256)
 
+        self.use_videoldm = True
+
         # for video ldm temporal layers
         self.num_temp_heads = 8
 
@@ -71,13 +73,13 @@ class Config:
 
         self.epochs = 3000
         self.log_every = 1
-        self.ckpt_every = 5000
+        self.ckpt_every = 25000
         self.load = None
-        self.accum_iter = 1
+        self.accum_iter = 4
 
-        self.batch_size = 128
+        self.batch_size = 2
         self.lr = 8e-5
         self.grad_clip = 1.0
 
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "outputs/025/checkpoints/0004999.pt"
+        self.ckpt_path = "outputs/026/checkpoints/0074999.pt"

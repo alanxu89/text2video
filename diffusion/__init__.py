@@ -56,13 +56,18 @@ class IDDPM(SpacedDiffusion):
         prompts,
         device,
         additional_args=None,
+        use_videoldm=False,
     ):
         n = len(prompts)
         z = torch.randn(n, *z_size, device=device)
         z = torch.cat([z, z], dim=0)
 
         model_args = text_encoder.encode(prompts)
-        y_null = text_encoder.null(n)
+        if use_videoldm:
+            if 'mask' in model_args:
+                model_args['encoder_attention_mask'] = model_args['mask']
+                del model_args['mask']
+        y_null = text_encoder.null(n).to(device=device)
         model_args["y"] = torch.cat([model_args["y"], y_null], 0)
         if additional_args is not None:
             model_args.update(additional_args)
@@ -89,7 +94,18 @@ def forward_with_cfg(model, x, t, y, cfg_scale, cfg_channels=None, **kwargs):
     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
     half = x[:len(x) // 2]
     combined = torch.cat([half, half], dim=0)
+    if "encoder_attention_mask" in kwargs and kwargs[
+            "encoder_attention_mask"] is not None:
+        if len(kwargs["encoder_attention_mask"]) != len(x):
+            kwargs["encoder_attention_mask"] = torch.cat([
+                kwargs["encoder_attention_mask"],
+                kwargs["encoder_attention_mask"]
+            ],
+                                                         dim=0).to(x.device)
+        y = y.squeeze()
     model_out = model.forward(combined, t, y, **kwargs)
+    if not isinstance(model_out, torch.Tensor):
+        model_out = model_out.sample
     model_out = model_out["x"] if isinstance(model_out, dict) else model_out
     if cfg_channels is None:
         # cfg_channels = model_out.shape[1] // 2

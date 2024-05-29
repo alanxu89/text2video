@@ -21,6 +21,7 @@ from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
 from clip import ClipEncoder
 from models import STDiT
+from videoldm import VideoLDM
 from diffusion import IDDPM
 from config import Config
 
@@ -287,8 +288,7 @@ def main():
         # text encoder
         if "t5" in cfg.textenc_pretrained:
             text_encoder_cls = T5Encoder
-        elif ("stable-diffusion" in cfg.textenc_pretrained
-              or "sd" in cfg.textenc_pretrained):
+        else:
             text_encoder_cls = ClipEncoder
         text_encoder = text_encoder_cls(from_pretrained=cfg.textenc_pretrained,
                                         model_max_length=cfg.model_max_length,
@@ -296,24 +296,33 @@ def main():
 
         text_encoder_output_dim = text_encoder.output_dim
 
-    # STDiT model
-    model = STDiT(
-        input_size=latent_size,
-        in_channels=vae_out_channels,
-        caption_channels=text_encoder_output_dim,
-        model_max_length=cfg.model_max_length,
-        depth=cfg.depth,
-        hidden_size=cfg.hidden_size,
-        num_heads=cfg.num_heads,
-        patch_size=cfg.patch_size,
-        enable_temporal_attn=cfg.enable_temporal_attn,
-        joint_st_attn=cfg.joint_st_attn,
-        use_3dconv=cfg.use_3dconv,
-        enable_mem_eff_attn=cfg.enable_mem_eff_attn,
-        enable_flashattn=cfg.enable_flashattn,
-        enable_grad_checkpoint=cfg.enable_grad_ckpt,
-        debug=cfg.debug,
-    )
+    if cfg.use_videoldm:
+        model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
+                                         subfolder='unet',
+                                         low_cpu_mem_usage=False,
+                                         torch_dtype=dtype)
+        for name, param in model.named_parameters():
+            if not ("conv_3ds" in name or "temp_attns" in name):
+                param.requires_grad = False
+    else:
+        # STDiT model
+        model = STDiT(
+            input_size=latent_size,
+            in_channels=vae_out_channels,
+            caption_channels=text_encoder_output_dim,
+            model_max_length=cfg.model_max_length,
+            depth=cfg.depth,
+            hidden_size=cfg.hidden_size,
+            num_heads=cfg.num_heads,
+            patch_size=cfg.patch_size,
+            enable_temporal_attn=cfg.enable_temporal_attn,
+            joint_st_attn=cfg.joint_st_attn,
+            use_3dconv=cfg.use_3dconv,
+            enable_mem_eff_attn=cfg.enable_mem_eff_attn,
+            enable_flashattn=cfg.enable_flashattn,
+            enable_grad_checkpoint=cfg.enable_grad_ckpt,
+            debug=cfg.debug,
+        )
 
     model_numel, model_numel_trainable = get_model_numel(model)
     print(
@@ -332,7 +341,7 @@ def main():
         update_ema(ema, model, decay=0, sharded=False)
         ema.eval()
 
-    scheduler = IDDPM(timestep_respacing="")
+    scheduler = IDDPM(timestep_respacing="", learn_sigma=not cfg.use_videoldm)
 
     opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 
@@ -396,6 +405,12 @@ def main():
                     with torch.no_grad():
                         x = vae.encode(x)
                         model_args = text_encoder.encode(y)
+                if cfg.use_videoldm:
+                    x = x.permute(0, 2, 1, 3, 4).reshape(-1, 4, 32, 32)
+                    y = y.squeeze().repeat(cfg.num_frames, 1, 1)
+                    mask = mask.repeat(cfg.num_frames, 1)
+                    model_args = dict(encoder_hidden_states=y,
+                                      encoder_attention_mask=mask)
                 t1 = time.time()
                 # diffusion
                 t = torch.randint(low=0,
@@ -469,15 +484,13 @@ def main():
                 if cfg.ckpt_every > 0 and (global_step +
                                            1) % cfg.ckpt_every == 0:
                     if rank == 0:
+                        model_states = ema.state_dict(
+                        ) if cfg.use_ema else model.state_dict()
                         checkpoint = {
-                            "model": model.state_dict(),
+                            "model": model_states,
                             "opt": opt.state_dict(),
                             "cfg": cfg
                         }
-                        if cfg.use_ema:
-                            checkpoint.update({
-                                "ema": ema.state_dict(),
-                            })
                         checkpoint_path = f"{checkpoint_dir}/{global_step:07d}.pt"
                         torch.save(checkpoint, checkpoint_path)
                         logger.info(

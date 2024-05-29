@@ -103,7 +103,9 @@ class ClipEncoder:
         self.text_encoder = FrozenCLIPEmbedder(path=from_pretrained,
                                                max_length=model_max_length).to(
                                                    device, dtype)
-        self.y_embedder = None
+        in_channels = 768
+        self.y_embedding = torch.randn(model_max_length,
+                                       in_channels) / in_channels**0.5
 
         self.model_max_length = model_max_length
         self.output_dim = self.text_encoder.transformer.config.hidden_size
@@ -115,7 +117,7 @@ class ClipEncoder:
         return dict(y=y, mask=mask)
 
     def null(self, n):
-        null_y = self.y_embedder.y_embedding[None].repeat(n, 1, 1)[:, None]
+        null_y = self.y_embedding[None].repeat(n, 1, 1)[:, None]
         return null_y
 
     def to(self, dtype):

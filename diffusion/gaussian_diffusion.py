@@ -285,6 +285,9 @@ class GaussianDiffusion:
         B, C = x.shape[:2]
         assert t.shape == (B, )
         model_output = model(x, t, **model_kwargs)
+        if not isinstance(model_output, th.Tensor):
+            model_output = model_output.sample
+
         if isinstance(model_output, tuple):
             model_output, extra = model_output
         else:
@@ -782,6 +785,8 @@ class GaussianDiffusion:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
             model_output = model(x_t, t, **model_kwargs)
+            if not isinstance(model_output, th.Tensor):
+                model_output = model_output.sample
 
             if self.model_var_type in [
                     ModelVarType.LEARNED,

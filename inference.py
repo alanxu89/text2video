@@ -11,7 +11,9 @@ from config import Config
 from train import to_torch_dtype
 from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
+from clip import ClipEncoder
 from models import STDiT
+from videoldm import VideoLDM
 from diffusion import IDDPM
 
 
@@ -21,7 +23,7 @@ def load_prompts(prompt_path):
     return prompts
 
 
-def load_checkpoint(model, ckpt_path, model_name="ema", save_as_pt=True):
+def load_checkpoint(model, ckpt_path, model_name="model", save_as_pt=True):
     if ckpt_path.endswith(".pt") or ckpt_path.endswith(".pth"):
         assert os.path.isfile(
             ckpt_path), f"Could not find DiT checkpoint at {ckpt_path}"
@@ -82,28 +84,39 @@ def main():
     input_size = (cfg.num_frames, *cfg.image_size)
     latent_size = vae.get_latent_size(input_size)
 
-    text_encoder = T5Encoder(from_pretrained=cfg.textenc_pretrained,
-                             model_max_length=cfg.model_max_length,
-                             dtype=dtype)
+    if "t5" in cfg.textenc_pretrained:
+        text_encoder_cls = T5Encoder
+    else:
+        text_encoder_cls = ClipEncoder
+    text_encoder = text_encoder_cls(from_pretrained=cfg.textenc_pretrained,
+                                    model_max_length=cfg.model_max_length,
+                                    dtype=dtype)
 
-    model = STDiT(
-        input_size=latent_size,
-        in_channels=vae.out_channels,
-        caption_channels=text_encoder.output_dim,
-        model_max_length=text_encoder.model_max_length,
-        depth=cfg.depth,
-        hidden_size=cfg.hidden_size,
-        num_heads=cfg.num_heads,
-        patch_size=cfg.patch_size,
-        joint_st_attn=cfg.joint_st_attn,
-        use_3dconv=cfg.use_3dconv,
-        enable_mem_eff_attn=cfg.enable_mem_eff_attn,
-        enable_flashattn=cfg.enable_flashattn,
-        enable_grad_checkpoint=False,
-        debug=cfg.debug,
-    )
-    load_checkpoint(model, cfg.ckpt_path, model_name="ema")
-    text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
+    if cfg.use_videoldm:
+        model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
+                                         subfolder='unet',
+                                         low_cpu_mem_usage=False,
+                                         torch_dtype=dtype)
+    else:
+        model = STDiT(
+            input_size=latent_size,
+            in_channels=vae.out_channels,
+            caption_channels=text_encoder.output_dim,
+            model_max_length=text_encoder.model_max_length,
+            depth=cfg.depth,
+            hidden_size=cfg.hidden_size,
+            num_heads=cfg.num_heads,
+            patch_size=cfg.patch_size,
+            joint_st_attn=cfg.joint_st_attn,
+            use_3dconv=cfg.use_3dconv,
+            enable_mem_eff_attn=cfg.enable_mem_eff_attn,
+            enable_flashattn=cfg.enable_flashattn,
+            enable_grad_checkpoint=False,
+            debug=cfg.debug,
+        )
+    load_checkpoint(model, cfg.ckpt_path, model_name="model")
+    if not cfg.use_videoldm:
+        text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
 
     # 4.3. move to device
     vae = vae.to(device).eval()
@@ -125,21 +138,31 @@ def main():
     for i in range(0, len(prompts), cfg.batch_size):
         batch_prompts = prompts[i:i + cfg.batch_size]
 
+        if cfg.use_videoldm:
+            batch_prompts = batch_prompts * cfg.num_frames
+            z_size = (vae.out_channels, *latent_size[1:])
+        else:
+            z_size = (vae.out_channels, *latent_size)
+
         # save vram with no_grad
         with torch.no_grad():
             samples = scheduler.sample(
                 model,
                 text_encoder,
-                z_size=(vae.out_channels, *latent_size),
+                z_size=z_size,
                 prompts=batch_prompts,
                 device=device,
                 additional_args=model_args,
+                use_videoldm=cfg.use_videoldm,
             )
 
             print("decoding...")
             torch.save(samples, os.path.join(save_dir, "latents.pt"))
 
-            for j in range(len(batch_prompts)):
+            if cfg.use_videoldm:
+                samples = samples.reshape(-1, cfg.num_frames,
+                                          *latent_size).permute(0, 2, 1, 3, 4)
+            for j in range(2):
                 save_sample(samples[j, :3, :1],
                             save_path=os.path.join(save_dir, "latents_" +
                                                    str(j) + "_t0"))
