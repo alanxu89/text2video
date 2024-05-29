@@ -5,12 +5,12 @@ class Config:
 
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
-        self.preprocessed_dir = "encoder_out_08"
+        self.preprocessed_dir = "encoder_out_09"
         self.text_key = "short_text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
 
-        self.num_frames = 4
+        self.num_frames = 6
         self.frame_interval = 2
         self.image_size = (256, 256)
 

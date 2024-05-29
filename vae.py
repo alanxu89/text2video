@@ -9,7 +9,7 @@ class VideoAutoEncoderKL(nn.Module):
 
     def __init__(self,
                  pretrained_model,
-                 subfoler="",
+                 subfolder="",
                  scaling_factor=0.13025,
                  dtype=torch.float16,
                  micro_batch_size=None,
@@ -19,7 +19,7 @@ class VideoAutoEncoderKL(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.image_vae = AutoencoderKL.from_pretrained(pretrained_model,
-                                                       subfoler=subfoler,
+                                                       subfolder=subfolder,
                                                        torch_dtype=dtype)
         self.dtype = dtype
         self.scaling_factor = scaling_factor

@@ -408,9 +408,10 @@ def main():
                         model_args = text_encoder.encode(y)
 
                 if cfg.use_videoldm:
-                    # =? [B, T, C, H, W] => [B*T, C, H, W]
+                    # => [B, T, C, H, W] => [B*T, C, H, W]
+                    x = x.permute(0, 2, 1, 3, 4)
                     chw = x.shape[-3:]
-                    x = x.permute(0, 2, 1, 3, 4).reshape(-1, *chw)
+                    x = x.reshape(-1, *chw)
                     y = y.squeeze().repeat(cfg.num_frames, 1, 1)
                     mask = mask.repeat(cfg.num_frames, 1)
                     model_args = dict(encoder_hidden_states=y,
