@@ -260,8 +260,9 @@ class TemporalAttention(nn.Module):
         b = bt // self.n_frames
         # [b*t, n, c] -> [b, 1, n, c]
         y = y[:b][:, None]
-        # [b, h*w, n, c]
-        y = y.expand(-1, h * w, -1, -1)
+        # => [b, h*w, n, c]
+        # y = y.expand(-1, h * w, -1, -1)
+        y = y.repeat(1, h * w, 1, 1)
         # [b*h*w, n, c]
         y = rearrange(y, 'b (h w) n c -> (b h w) n c', h=h, w=w)
 

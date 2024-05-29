@@ -365,6 +365,13 @@ class VideoLDM(UNet2DConditionModel):
             attention_type=attention_type,
             cross_attention_dim=cross_attention_dim)
 
+    # def forward(self, *args, **kwargs):
+    #     for arg in args:
+    #         print(arg.shape)
+    #     for k in kwargs:
+    #         print(k, kwargs[k].shape)
+    #     return super().forward(*args, **kwargs)
+
 
 if __name__ == "__main__":
     model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
