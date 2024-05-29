@@ -96,8 +96,7 @@ def main():
     # text encoder
     if "t5" in cfg.textenc_pretrained:
         text_encoder_cls = T5Encoder
-    elif ("stable-diffusion" in cfg.textenc_pretrained
-          or "sd" in cfg.textenc_pretrained):
+    else:
         text_encoder_cls = ClipEncoder
     text_encoder = text_encoder_cls(from_pretrained=cfg.textenc_pretrained,
                                     model_max_length=cfg.model_max_length,
