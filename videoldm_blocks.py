@@ -304,6 +304,8 @@ class VLDMCrossAttnDownBlock(CrossAttnDownBlock2D):
         self.conv_3ds = nn.ModuleList(conv_3ds)
         self.temp_attns = nn.ModuleList(tempo_attns)
 
+        self.gradient_checkpointing = True
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -411,6 +413,8 @@ class VLDMCrossAttnUpBlock2D(CrossAttnUpBlock2D):
 
         self.conv_3ds = nn.ModuleList(conv_3ds)
         self.temp_attns = nn.ModuleList(tempo_attns)
+
+        self.gradient_checkpointing = True
 
     def forward(
         self,
