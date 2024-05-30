@@ -5,13 +5,13 @@ class Config:
 
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
-        self.preprocessed_dir = "encoder_out_09"
+        self.preprocessed_dir = "encoder_out_11"
         self.text_key = "short_text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
 
-        self.num_frames = 6
-        self.frame_interval = 2
+        self.num_frames = 12
+        self.frame_interval = 5
         self.image_size = (256, 256)
 
         self.use_videoldm = True
@@ -46,7 +46,6 @@ class Config:
         self.subfolder = "vae"
         self.vae_scaling_factor = 0.18215
 
-
         # text encoder
         # self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"
         # self.model_max_length = 512
@@ -77,7 +76,7 @@ class Config:
 
         self.epochs = 3000
         self.log_every = 1
-        self.ckpt_every = 25000
+        self.ckpt_every = 10000
         self.load = None
         self.accum_iter = 4
 
@@ -86,4 +85,4 @@ class Config:
         self.grad_clip = 1.0
 
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "outputs/026/checkpoints/0074999.pt"
+        self.ckpt_path = "outputs/027/checkpoints/0009999.pt"
