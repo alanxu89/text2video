@@ -379,19 +379,33 @@ if __name__ == "__main__":
                                      low_cpu_mem_usage=False,
                                      torch_dtype=torch.float16).cuda()
 
+    # model.train()
+    cnt = 0
     for name, param in model.named_parameters():
         if not ("conv_3ds" in name or "temp_attns" in name):
             param.requires_grad = False
-    model.train()
+            cnt += param.numel()
+    print('\n')
+    num_params = 0
+    num_params_trainable = 0
+    for p in model.parameters():
+        # print(type(p), p.name())
+        num_params += p.numel()
+        if p.requires_grad:
+            num_params_trainable += p.numel()
+    print(
+        f"Trainable model params: {num_params_trainable}, Set grad false params: {cnt}, Total model params: {num_params}\n"
+    )
 
-    print("\n\n")
-
+    cnt = 0
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print(name, param.shape)
+            # print(name, param.shape)
+            cnt += param.numel()
+    print(cnt)
 
     B = 2
-    T = 4
+    T = 12
     n = B * T
 
     x = torch.randn(n, 4, 32, 32).cuda().half()
