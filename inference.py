@@ -123,7 +123,9 @@ def main():
     vae = vae.to(device).eval()
     model = model.to(device).eval()
 
-    scheduler = IDDPM(num_sampling_steps=250, cfg_scale=4.0)
+    scheduler = IDDPM(num_sampling_steps=250,
+                      learn_sigma=not cfg.use_videoldm,
+                      cfg_scale=4.0)
 
     model_args = dict()
 
@@ -162,7 +164,7 @@ def main():
 
             if cfg.use_videoldm:
                 samples = samples.reshape(-1, cfg.num_frames,
-                                          *latent_size).permute(0, 2, 1, 3, 4)
+                                          *z_size).permute(0, 2, 1, 3, 4)
             for j in range(2):
                 save_sample(samples[j, :3, :1],
                             save_path=os.path.join(save_dir, "latents_" +
