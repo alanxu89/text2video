@@ -71,7 +71,7 @@ def main():
     dataset = DatasetFromCSV(cfg.data_path,
                              num_frames=cfg.num_frames,
                              frame_interval=cfg.frame_interval,
-                             transform=get_transforms_video(),
+                             transform=get_transforms_video(cfg.image_size),
                              root=cfg.root)
 
     dataloader = DataLoader(
