@@ -77,7 +77,7 @@ class Config:
         self.epochs = 3000
         self.log_every = 1
         self.ckpt_every = 10000
-        self.load = None
+        self.load = None  #"outputs/027/checkpoints/0039999.pt"
         self.accum_iter = 4
 
         self.batch_size = 2
@@ -85,4 +85,4 @@ class Config:
         self.grad_clip = 1.0
 
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "outputs/027/checkpoints/0009999.pt"
+        self.ckpt_path = "outputs/027/checkpoints/0039999.pt"

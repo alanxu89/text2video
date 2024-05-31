@@ -338,9 +338,6 @@ def main():
     # 4.3. move to device
     model = model.to(device, dtype)
     model.train()
-    if cfg.use_ema:
-        update_ema(ema, model, decay=0, sharded=False)
-        ema.eval()
 
     scheduler = IDDPM(timestep_respacing="", learn_sigma=not cfg.use_videoldm)
 
@@ -356,16 +353,19 @@ def main():
     running_loss = 0.0
 
     # 6.1. resume training
-    # if cfg.load is not None:
-    #     logger.info("Loading checkpoint")
-    #     start_epoch, start_step, sampler_start_idx = load(
-    #         booster, model, ema, opt, lr_scheduler, cfg.load)
-    #     logger.info(
-    #         f"Loaded checkpoint {cfg.load} at epoch {start_epoch} step {start_step}"
-    #     )
-    # logger.info(
-    #     f"Training for {cfg.epochs} epochs with {num_steps_per_epoch} steps per epoch"
-    # )
+    if cfg.load is not None:
+        logger.info(f"Loading checkpoint {cfg.load}")
+        checkpoint = torch.load(cfg.load)
+        model.load_state_dict(checkpoint['model'])
+        opt.load_state_dict(checkpoint['opt'])
+        if 'epoch' in checkpoint:
+            start_epoch = checkpoint['epoch']
+        logger.info(f"Loaded checkpoint")
+        del checkpoint
+
+    if cfg.use_ema:
+        update_ema(ema, model, decay=0, sharded=False)
+        ema.eval()
 
     # dataloader.sampler.set_start_index(sampler_start_idx)
     # model_sharding(ema)
@@ -494,7 +494,8 @@ def main():
                         checkpoint = {
                             "model": model_states,
                             "opt": opt.state_dict(),
-                            "cfg": cfg
+                            "cfg": cfg,
+                            "epoch": epoch,
                         }
                         checkpoint_path = f"{checkpoint_dir}/{global_step:07d}.pt"
                         torch.save(checkpoint, checkpoint_path)
