@@ -481,10 +481,11 @@ def main():
                     })
                     running_loss = 0
                     log_step = 0
-                    writer.add_scalar("loss", loss.item(), global_step)
-                    for term in loss_terms:
-                        writer.add_scalar(term, loss_terms[term].item(),
-                                          global_step)
+                    if rank == 0:
+                        writer.add_scalar("loss", loss.item(), global_step)
+                        for term in loss_terms:
+                            writer.add_scalar(term, loss_terms[term].item(),
+                                              global_step)
 
                 # Save checkpoint
                 if cfg.ckpt_every > 0 and (global_step +
