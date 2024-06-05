@@ -9,8 +9,6 @@ import torch.nn.functional as F
 
 from timm.models.vision_transformer import Mlp
 
-import xformers.ops as xops
-
 approx_gelu = lambda: nn.GELU(approximate="tanh")
 
 
@@ -93,6 +91,8 @@ class Attention(nn.Module):
                 softmax_scale=self.scale,
             )  # [B, N, num_heads, head_dim]
         elif self.enable_mem_eff_attn:
+            import xformers.ops as xops
+
             # [B, N, num_heads, head_dim]
             if attn_bias is not None:
                 attn_bias = attn_bias.to(q.dtype)
@@ -152,6 +152,7 @@ class MultiHeadCrossAttention(nn.Module):
         kv = self.kv_linear(c).reshape(1, -1, 2, self.num_heads, self.head_dim)
         k, v = kv.unbind(2)
 
+        import xformers.ops as xops
         attn_bias = None
         if mask is not None:
             attn_bias = xops.fmha.BlockDiagonalMask.from_seqlens([N] * B, mask)
