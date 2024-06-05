@@ -324,6 +324,7 @@ def main():
             enable_flashattn=cfg.enable_flashattn,
             enable_grad_checkpoint=cfg.enable_grad_ckpt,
             debug=cfg.debug,
+            class_dropout_prob=cfg.token_drop_prob,
         )
 
     model_numel, model_numel_trainable = get_model_numel(model)

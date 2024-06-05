@@ -365,12 +365,31 @@ class VideoLDM(UNet2DConditionModel):
             attention_type=attention_type,
             cross_attention_dim=cross_attention_dim)
 
-    # def forward(self, *args, **kwargs):
-    #     for arg in args:
-    #         print(arg.shape)
-    #     for k in kwargs:
-    #         print(k, kwargs[k].shape)
-    #     return super().forward(*args, **kwargs)
+        # classifier-free guidance
+        self.uncond_prob = self.cfg.token_drop_prob
+        self.register_buffer("y_embedding", torch.randn(77, 768) / 768**0.5)
+
+    def forward(self, *args, **kwargs):
+        # for arg in args:
+        #     print(arg.shape)
+        # for k in kwargs:
+        #     print(k, kwargs[k].shape)
+
+        if (self.training and self.uncond_prob > 0.0):
+            caption_key = "encoder_hidden_states"
+            if caption_key in kwargs:
+                kwargs[caption_key] = self.token_drop(kwargs[caption_key])
+
+        return super().forward(*args, **kwargs)
+
+    def token_drop(self, caption):
+        bs = caption.shape[0] // self.cfg.num_frames
+        drop_ids = torch.rand(bs).cuda() < self.uncond_prob
+        drop_ids = drop_ids.repeat(self.cfg.num_frames)
+
+        caption = torch.where(drop_ids[:, None, None], self.y_embedding,
+                              caption)
+        return caption
 
 
 if __name__ == "__main__":

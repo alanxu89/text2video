@@ -35,6 +35,9 @@ class Config:
         self.enable_flashattn = False
         self.enable_grad_ckpt = True
 
+        # for classifier-free guidance
+        self.token_drop_prob = 0.1
+
         self.use_ema = True
 
         # pretrained vae
