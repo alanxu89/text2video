@@ -10,6 +10,7 @@ from diffusers.models.unets.unet_2d_blocks import (
     UpBlock2D,
 )
 from diffusers.models.attention_processor import Attention
+from diffusers.models.attention import FeedForward
 
 from einops import rearrange
 
@@ -225,6 +226,101 @@ class Conv3DLayer(nn.Module):
         return x
 
 
+class TemporalAttentionV2(nn.Module):
+
+    def __init__(self, dim, n_frames, n_heads=8, kv_dim=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.n_frames = n_frames
+        self.n_heads = n_heads
+
+        inner_dim = n_heads * 64
+
+        self.gn = torch.nn.GroupNorm(num_groups=32,
+                                     num_channels=dim,
+                                     eps=1e-6,
+                                     affine=True)
+        self.proj_in = nn.Conv2d(dim,
+                                 inner_dim,
+                                 kernel_size=1,
+                                 stride=1,
+                                 padding=0)
+
+        self.pos_enc = nn.Parameter(torch.from_numpy(
+            get_1d_sincos_pos_embed(inner_dim, length=n_frames)),
+                                    requires_grad=False)
+
+        # below is the basic transformer block in SD
+        self.norm1 = nn.LayerNorm(inner_dim)
+        self.attn1 = Attention(query_dim=inner_dim,
+                               heads=n_heads,
+                               cross_attention_dim=None)  # self-attention
+        self.norm2 = nn.LayerNorm(inner_dim)
+        self.attn2 = Attention(query_dim=inner_dim,
+                               heads=n_heads,
+                               cross_attention_dim=kv_dim)  # cross-attention
+        self.norm3 = nn.LayerNorm(inner_dim)
+        self.ff = FeedForward(inner_dim)
+
+        # project out
+        self.proj_out = nn.Linear(inner_dim, dim)
+
+        self.alpha = nn.Parameter(torch.ones(1))
+
+    def forward(self, x, y):
+        # x shape: [b*t, cx, h, w]
+        # y shape: [b*t, n, cy]
+
+        skip = x
+        bt, c, h, w = x.shape
+
+        x = self.gn(x)
+        x = self.proj_in(x)
+
+        # add pos_enc to the t dim
+        x = rearrange(x, '(b t) c h w -> b (h w) t c', t=self.n_frames)
+        x = x + self.pos_enc.to(x.dtype)
+        x = rearrange(x, 'b (h w) t c -> (b h w) t c', h=h, w=w)
+
+        # process cond
+        b = bt // self.n_frames
+        # [b*t, n, c] -> [b, 1, n, c]
+        y = y[:b][:, None]
+        # => [b, h*w, n, c]
+        # y = y.expand(-1, h * w, -1, -1)
+        y = y.repeat(1, h * w, 1, 1)
+        # [b*h*w, n, c]
+        y = rearrange(y, 'b (h w) n c -> (b h w) n c', h=h, w=w)
+
+        # self-attn
+        h1 = self.norm1(x)
+        h1 = self.attn1(x)
+        x = x + h1
+
+        # cross-attn
+        h2 = self.norm2(x)
+        h2 = self.attn2(x, y)
+        x = x + h2
+
+        # feed-forward
+        h3 = self.norm3(x)
+        h3 = self.ff(h3)
+        x = x + h3
+
+        # project out
+        x = self.proj_out(x)
+
+        # rearrange back
+        x = rearrange(x, '(b h w) t c -> (b t) c h w', h=h, w=w)
+
+        with torch.no_grad():
+            self.alpha.clamp_(0, 1)
+
+        out = self.alpha * skip + (1 - self.alpha) * x
+
+        return out
+
+
 class TemporalAttention(nn.Module):
 
     def __init__(self, dim, n_frames, n_heads=8, kv_dim=None, *args, **kwargs):
@@ -296,10 +392,10 @@ class VLDMCrossAttnDownBlock(CrossAttnDownBlock2D):
                             n_frames=n_frames))
 
             tempo_attns.append(
-                TemporalAttention(dim=out_channels,
-                                  n_frames=n_frames,
-                                  n_heads=n_temp_heads,
-                                  kv_dim=cross_attn_dim))
+                TemporalAttentionV2(dim=out_channels,
+                                    n_frames=n_frames,
+                                    n_heads=n_temp_heads,
+                                    kv_dim=cross_attn_dim))
 
         self.conv_3ds = nn.ModuleList(conv_3ds)
         self.temp_attns = nn.ModuleList(tempo_attns)
@@ -406,10 +502,10 @@ class VLDMCrossAttnUpBlock2D(CrossAttnUpBlock2D):
                             n_frames=n_frames))
 
             tempo_attns.append(
-                TemporalAttention(dim=out_channels,
-                                  n_frames=n_frames,
-                                  n_heads=n_temp_heads,
-                                  kv_dim=cross_attn_dim))
+                TemporalAttentionV2(dim=out_channels,
+                                    n_frames=n_frames,
+                                    n_heads=n_temp_heads,
+                                    kv_dim=cross_attn_dim))
 
         self.conv_3ds = nn.ModuleList(conv_3ds)
         self.temp_attns = nn.ModuleList(tempo_attns)
