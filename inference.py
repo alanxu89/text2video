@@ -118,6 +118,11 @@ def main():
     load_checkpoint(model, cfg.ckpt_path, model_name="model")
     if not cfg.use_videoldm:
         text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
+    else:
+        pass
+        # for name, param in model.named_parameters():
+        #     if 'alpha' in name:
+        #         param.data = torch.ones(1)
 
     # 4.3. move to device
     vae = vae.to(device).eval()
@@ -125,7 +130,7 @@ def main():
 
     scheduler = IDDPM(num_sampling_steps=250,
                       learn_sigma=not cfg.use_videoldm,
-                      cfg_scale=4.0)
+                      cfg_scale=cfg.cfg_scale)
 
     model_args = dict()
 

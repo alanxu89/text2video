@@ -423,8 +423,9 @@ if __name__ == "__main__":
             cnt += param.numel()
     print(cnt)
 
+    cfg = Config()
     B = 2
-    T = 12
+    T = cfg.num_frames
     n = B * T
 
     x = torch.randn(n, 4, 32, 32).cuda().half()
