@@ -267,9 +267,10 @@ class TemporalAttentionV2(nn.Module):
 
         self.alpha = nn.Parameter(torch.ones(1))
 
-    def forward(self, x, y):
+    def forward(self, x, y, mask):
         # x shape: [b*t, cx, h, w]
         # y shape: [b*t, n, cy]
+        # mask shape: [b*t, 1, n] or [b*t, h*w, n]
 
         skip = x
         bt, c, h, w = x.shape
@@ -291,6 +292,7 @@ class TemporalAttentionV2(nn.Module):
         y = y.repeat(1, h * w, 1, 1)
         # [b*h*w, n, c]
         y = rearrange(y, 'b (h w) n c -> (b h w) n c', h=h, w=w)
+        mask = mask[:b].repeat(h * w, 1, 1)
 
         # self-attn
         h1 = self.norm1(x)
@@ -299,7 +301,7 @@ class TemporalAttentionV2(nn.Module):
 
         # cross-attn
         h2 = self.norm2(x)
-        h2 = self.attn2(x, y)
+        h2 = self.attn2(x, y, mask)
         x = x + h2
 
         # feed-forward
@@ -464,6 +466,7 @@ class VLDMCrossAttnDownBlock(CrossAttnDownBlock2D):
             hidden_states = temp_attn(
                 hidden_states,
                 encoder_hidden_states,
+                encoder_attention_mask,
             )
 
             # apply additional residuals to the output of the last pair of resnet and attention blocks
@@ -577,7 +580,11 @@ class VLDMCrossAttnUpBlock2D(CrossAttnUpBlock2D):
             )[0]
 
             # temporal attn
-            hidden_states = temp_attn(hidden_states, encoder_hidden_states)
+            hidden_states = temp_attn(
+                hidden_states,
+                encoder_hidden_states,
+                encoder_attention_mask,
+            )
 
         if self.upsamplers is not None:
             for upsampler in self.upsamplers:
