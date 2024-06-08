@@ -299,13 +299,21 @@ def main():
         text_encoder_output_dim = text_encoder.output_dim
 
     if cfg.use_videoldm:
-        model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
-                                         subfolder='unet',
-                                         low_cpu_mem_usage=False,
-                                         torch_dtype=dtype)
-        for name, param in model.named_parameters():
-            if not ("conv_3ds" in name or "temp_attns" in name):
-                param.requires_grad = False
+        if cfg.image_finetune:
+            from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
+            model = UNet2DConditionModel.from_pretrained(
+                'runwayml/stable-diffusion-v1-5',
+                subfolder='unet',
+                low_cpu_mem_usage=False,
+                torch_dtype=dtype)
+        else:
+            model = VideoLDM.from_pretrained('runwayml/stable-diffusion-v1-5',
+                                             subfolder='unet',
+                                             low_cpu_mem_usage=False,
+                                             torch_dtype=dtype)
+            for name, param in model.named_parameters():
+                if not ("conv_3ds" in name or "temp_attns" in name):
+                    param.requires_grad = False
     else:
         # STDiT model
         model = STDiT(
@@ -359,9 +367,11 @@ def main():
         logger.info(f"Loading checkpoint {cfg.load}")
         checkpoint = torch.load(cfg.load)
         model.load_state_dict(checkpoint['model'])
-        opt.load_state_dict(checkpoint['opt'])
-        if 'epoch' in checkpoint:
-            start_epoch = checkpoint['epoch']
+        logger.info(f"model weights loaded")
+        if not cfg.load_weights_only:
+            opt.load_state_dict(checkpoint['opt'])
+            if 'epoch' in checkpoint:
+                start_epoch = checkpoint['epoch']
         logger.info(f"Loaded checkpoint")
         del checkpoint
 

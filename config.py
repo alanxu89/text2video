@@ -15,6 +15,7 @@ class Config:
         self.image_size = (256, 256)
 
         self.use_videoldm = True
+        self.image_finetune = False
 
         # for video ldm temporal layers
         self.num_temp_heads = 8
@@ -81,6 +82,7 @@ class Config:
         self.log_every = 1
         self.ckpt_every = 10000
         self.load = None  #"outputs/027/checkpoints/0039999.pt"
+        self.load_weights_only = False
         self.accum_iter = 4
 
         self.batch_size = 2
