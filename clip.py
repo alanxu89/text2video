@@ -104,8 +104,8 @@ class ClipEncoder:
                                                max_length=model_max_length).to(
                                                    device, dtype)
         in_channels = 768
-        self.y_embedding = torch.randn(model_max_length,
-                                       in_channels) / in_channels**0.5
+        # unconditional embedding for stable diffusion
+        self.y_embedding = self.encode([""])['y'].squeeze()
 
         self.model_max_length = model_max_length
         self.output_dim = self.text_encoder.transformer.config.hidden_size
@@ -130,9 +130,10 @@ if __name__ == "__main__":
 
     from utils import readtexts_from_file
 
-    text_file = "./assets/texts/t2v_sora.txt"
+    text_file = "./assets/texts/mixkit_test_prompts4.txt"
     texts = readtexts_from_file(text_file)
     print(len(texts))
+    print(texts)
     out = enc.encode(texts)
     # print(out)
     for key, val in out.items():
