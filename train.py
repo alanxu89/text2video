@@ -16,6 +16,8 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
+from einops import rearrange
+
 from datasets import DatasetFromCSV, PreprocessedDatasetFromCSV, get_transforms_video
 from vae import VideoAutoEncoderKL
 from t5 import T5Encoder
@@ -420,11 +422,10 @@ def main():
                         model_args = text_encoder.encode(y)
 
                 if cfg.use_videoldm:
-                    # => [B, T, C, H, W] => [B*T, C, H, W]
-                    x = x.permute(0, 2, 1, 3, 4)
-                    chw = x.shape[-3:]
-                    x = x.reshape(-1, *chw)
-                    y = y.squeeze().repeat(cfg.num_frames, 1, 1)
+                    # [B, C, T, H, W] => [B*T, C, H, W]
+                    x = rearrange(x, 'b c t h w -> (b t) c h w')
+                    y = y.repeat(1, cfg.num_frames, 1, 1)
+                    y = rearrange(y, 'b t n c -> (b t) n c')
                     model_args = dict(encoder_hidden_states=y)
                     if cfg.use_attention_mask:
                         mask = mask.repeat(cfg.num_frames, 1)

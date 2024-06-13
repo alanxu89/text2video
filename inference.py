@@ -147,7 +147,10 @@ def main():
         batch_prompts = prompts[i:i + cfg.batch_size]
 
         if cfg.use_videoldm:
-            batch_prompts = batch_prompts * cfg.num_frames
+            new_batch_prompts = []
+            for k in range(len(batch_prompts)):
+                new_batch_prompts.extend([batch_prompts[k]] * cfg.num_frames)
+            batch_prompts = new_batch_prompts
             z_size = (vae.out_channels, *latent_size[1:])
         else:
             z_size = (vae.out_channels, *latent_size)
@@ -179,7 +182,7 @@ def main():
             print("done\n")
 
         for idx, sample in enumerate(samples):
-            print(f"Prompt:\n {batch_prompts[idx]}")
+            print(f"Prompt:\n {batch_prompts[idx*cfg.num_frames]}")
             save_path = os.path.join(save_dir, f"sample_{sample_idx}")
             save_sample(sample, fps=6, save_path=save_path, normalize=False)
             save_sample(sample[:, :1],
