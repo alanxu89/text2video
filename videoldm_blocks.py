@@ -295,7 +295,10 @@ class TemporalAttentionV2(nn.Module):
         y = rearrange(y, 'b (h w) n c -> (b h w) n c', h=h, w=w)
 
         if mask is not None:
-            mask = mask[:b].repeat(h * w, 1, 1)
+            # [b*t, m, n] -> [b, 1, m, n] -> [b, h*w, m, n]
+            mask = mask[::self.n_frames][:, None]
+            mask = mask.repeat(1, h * w, 1, 1)
+            mask = rearrange(y, 'b (h w) m n -> (b h w) m n', h=h, w=w)
 
         # self-attn
         h1 = self.norm1(x)
