@@ -425,9 +425,11 @@ def main():
                     chw = x.shape[-3:]
                     x = x.reshape(-1, *chw)
                     y = y.squeeze().repeat(cfg.num_frames, 1, 1)
-                    mask = mask.repeat(cfg.num_frames, 1)
-                    model_args = dict(encoder_hidden_states=y,
-                                      encoder_attention_mask=mask)
+                    model_args = dict(encoder_hidden_states=y)
+                    if cfg.use_attention_mask:
+                        mask = mask.repeat(cfg.num_frames, 1)
+                        model_args["encoder_attention_mask"] = mask
+
                 t1 = time.time()
                 # diffusion
                 t = torch.randint(low=0,

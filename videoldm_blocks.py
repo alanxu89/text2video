@@ -267,7 +267,7 @@ class TemporalAttentionV2(nn.Module):
 
         self.alpha = nn.Parameter(torch.ones(1))
 
-    def forward(self, x, y, mask):
+    def forward(self, x, y, mask=None):
         # x shape: [b*t, cx, h, w]
         # y shape: [b*t, n, cy]
         # mask shape: [b*t, 1, n] or [b*t, h*w, n]
@@ -292,7 +292,9 @@ class TemporalAttentionV2(nn.Module):
         y = y.repeat(1, h * w, 1, 1)
         # [b*h*w, n, c]
         y = rearrange(y, 'b (h w) n c -> (b h w) n c', h=h, w=w)
-        mask = mask[:b].repeat(h * w, 1, 1)
+
+        if mask is not None:
+            mask = mask[:b].repeat(h * w, 1, 1)
 
         # self-attn
         h1 = self.norm1(x)
