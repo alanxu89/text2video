@@ -279,6 +279,12 @@ def main():
     # encoders
     vae = None
     text_encoder = None
+    # text encoder
+    if "t5" in cfg.textenc_pretrained:
+        text_encoder_cls = T5Encoder
+    else:
+        text_encoder_cls = ClipEncoder
+
     if not cfg.use_preprocessed_data:
         # video VAE
         vae = VideoAutoEncoderKL(cfg.vae_pretrained,
@@ -289,15 +295,9 @@ def main():
         latent_size = vae.get_latent_size(input_size)
         vae_out_channels = vae.out_channels
 
-        # text encoder
-        if "t5" in cfg.textenc_pretrained:
-            text_encoder_cls = T5Encoder
-        else:
-            text_encoder_cls = ClipEncoder
         text_encoder = text_encoder_cls(from_pretrained=cfg.textenc_pretrained,
                                         model_max_length=cfg.model_max_length,
                                         dtype=dtype)
-
         text_encoder_output_dim = text_encoder.output_dim
 
     if cfg.use_videoldm:
@@ -316,6 +316,14 @@ def main():
             for name, param in model.named_parameters():
                 if not ("conv_3ds" in name or "temp_attns" in name):
                     param.requires_grad = False
+
+            # empty token ([""]) embedding for uncond generation in classifier-free guidance
+            if text_encoder is None:
+                text_encoder = text_encoder_cls(
+                    from_pretrained=cfg.textenc_pretrained,
+                    model_max_length=cfg.model_max_length,
+                    dtype=dtype)
+            model.y_embedding = text_encoder.null(1).squeeze()
     else:
         # STDiT model
         model = STDiT(
@@ -336,6 +344,13 @@ def main():
             debug=cfg.debug,
             class_dropout_prob=cfg.token_drop_prob,
         )
+
+    # freeup memory
+    if cfg.use_preprocessed_data:
+        if text_encoder is not None:
+            del text_encoder
+        if vae is not None:
+            del vae
 
     model_numel, model_numel_trainable = get_model_numel(model)
     print(
