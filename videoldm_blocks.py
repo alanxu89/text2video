@@ -285,8 +285,9 @@ class TemporalAttentionV2(nn.Module):
 
         # process cond
         b = bt // self.n_frames
-        # [b*t, n, c] -> [b, 1, n, c]
-        y = y[:b][:, None]
+        # [b*t, n, c] -> [b, n, c] -> [b, 1, n, c]
+        # for row major layout, the t dim goes first in memory
+        y = y[::self.n_frames][:, None]
         # => [b, h*w, n, c]
         # y = y.expand(-1, h * w, -1, -1)
         y = y.repeat(1, h * w, 1, 1)
