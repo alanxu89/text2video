@@ -16,7 +16,7 @@ class Config:
 
         self.use_videoldm = True
         self.image_finetune = False
-        self.use_attention_mask = True
+        self.use_attention_mask = False
 
         # for video ldm temporal layers
         self.num_temp_heads = 8
