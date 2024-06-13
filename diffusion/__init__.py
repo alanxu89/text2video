@@ -69,6 +69,7 @@ class IDDPM(SpacedDiffusion):
             model_args.update(additional_args)
 
         if use_videoldm:
+            model_args['y'] = model_args['y'].squeeze()
             if 'mask' in model_args:
                 # model_args['encoder_attention_mask'] = model_args['mask']
                 del model_args['mask']
@@ -103,7 +104,7 @@ def forward_with_cfg(model, x, t, y, cfg_scale, cfg_channels=None, **kwargs):
                 kwargs["encoder_attention_mask"]
             ],
                                                          dim=0).to(x.device)
-        y = y.squeeze()
+
     model_out = model.forward(combined, t, y, **kwargs)
     if not isinstance(model_out, torch.Tensor):
         model_out = model_out.sample
