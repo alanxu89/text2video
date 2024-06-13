@@ -128,7 +128,7 @@ def main():
     vae = vae.to(device).eval()
     model = model.to(device).eval()
 
-    scheduler = IDDPM(num_sampling_steps=250,
+    scheduler = IDDPM(num_sampling_steps=1000,
                       learn_sigma=not cfg.use_videoldm,
                       cfg_scale=cfg.cfg_scale)
 
