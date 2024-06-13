@@ -63,14 +63,15 @@ class IDDPM(SpacedDiffusion):
         z = torch.cat([z, z], dim=0)
 
         model_args = text_encoder.encode(prompts)
-        if use_videoldm:
-            if 'mask' in model_args:
-                model_args['encoder_attention_mask'] = model_args['mask']
-                del model_args['mask']
         y_null = text_encoder.null(n).to(device=device)
         model_args["y"] = torch.cat([model_args["y"], y_null], 0)
         if additional_args is not None:
             model_args.update(additional_args)
+
+        if use_videoldm:
+            if 'mask' in model_args:
+                # model_args['encoder_attention_mask'] = model_args['mask']
+                del model_args['mask']
 
         forward = partial(forward_with_cfg, model, cfg_scale=self.cfg_scale)
 
@@ -109,7 +110,7 @@ def forward_with_cfg(model, x, t, y, cfg_scale, cfg_channels=None, **kwargs):
     model_out = model_out["x"] if isinstance(model_out, dict) else model_out
     if cfg_channels is None:
         # cfg_channels = model_out.shape[1] // 2
-        cfg_channels = 3
+        cfg_channels = 4  # use all channels for cfg
 
     # For exact reproducibility reasons, we apply classifier-free guidance on only
     # three channels by default. The standard approach to cfg applies it to all channels.
