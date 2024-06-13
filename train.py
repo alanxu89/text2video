@@ -444,6 +444,9 @@ def main():
                     model_args = dict(encoder_hidden_states=y)
                     if cfg.use_attention_mask:
                         mask = mask.repeat(cfg.num_frames, 1)
+                        mask = rearrange(mask,
+                                         '(t b) c -> (b t) c',
+                                         t=cfg.num_frames)
                         model_args["encoder_attention_mask"] = mask
 
                 t1 = time.time()
