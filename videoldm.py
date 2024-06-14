@@ -385,7 +385,8 @@ class VideoLDM(UNet2DConditionModel):
     def token_drop(self, caption):
         bs = caption.shape[0] // self.cfg.num_frames
         drop_ids = torch.rand(bs).cuda() < self.uncond_prob
-        drop_ids = drop_ids.repeat(self.cfg.num_frames)
+        # for example: [0, 1] => [0, 0, 0, 0, 1, 1, 1, 1]
+        drop_ids = drop_ids[:, None].repeat(1, self.cfg.num_frames).flatten()
 
         caption = torch.where(drop_ids[:, None, None], self.y_embedding,
                               caption)
