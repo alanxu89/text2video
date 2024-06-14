@@ -436,6 +436,9 @@ def main():
                         x = vae.encode(x)
                         model_args = text_encoder.encode(y)
 
+                # original batch size without the t dimension
+                bs_original = x.shape[0]
+
                 if cfg.use_videoldm:
                     # [B, C, T, H, W] => [B*T, C, H, W]
                     x = rearrange(x, 'b c t h w -> (b t) c h w')
@@ -453,8 +456,11 @@ def main():
                 # diffusion
                 t = torch.randint(low=0,
                                   high=scheduler.num_timesteps,
-                                  size=(x.shape[0], ),
+                                  size=(bs_original, ),
                                   device=device)
+                if cfg.use_videoldm:
+                    # use the same t step for different frames in the same video
+                    t = t[:, None].repeat(1, cfg.num_frames).flatten()
 
                 # Enables autocasting for the forward pass (model + loss)
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
