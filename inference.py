@@ -115,20 +115,23 @@ def main():
             enable_grad_checkpoint=False,
             debug=cfg.debug,
         )
+
     load_checkpoint(model, cfg.ckpt_path, model_name="model")
-    if not cfg.use_videoldm:
-        text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
-    else:
-        pass
+
+    # or classifier-free guidance
+    if cfg.use_videoldm:
+        model.y_embedding = text_encoder.null(1).squeeze()
         # for name, param in model.named_parameters():
         #     if 'alpha' in name:
         #         param.data = torch.ones(1)
+    else:
+        text_encoder.y_embedder = model.y_embedder  # hack for classifier-free guidance
 
     # 4.3. move to device
     vae = vae.to(device).eval()
     model = model.to(device).eval()
 
-    scheduler = IDDPM(num_sampling_steps=1000,
+    scheduler = IDDPM(num_sampling_steps=250,
                       learn_sigma=not cfg.use_videoldm,
                       cfg_scale=cfg.cfg_scale)
 
