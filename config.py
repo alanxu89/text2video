@@ -5,16 +5,16 @@ class Config:
 
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
-        self.preprocessed_dir = "encoder_out_14"
+        self.preprocessed_dir = "encoder_out_15"
         self.text_key = "short_text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
 
-        self.num_frames = 4
-        self.frame_interval = 21
+        self.num_frames = 16
+        self.frame_interval = 4
         self.image_size = (256, 256)
 
-        self.use_videoldm = True
+        self.use_videoldm = False
         self.image_finetune = False
         self.use_attention_mask = False
 
@@ -92,5 +92,5 @@ class Config:
 
         # inference
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "/home/ubuntu/Downloads/0149999.pt"
+        self.ckpt_path = "/home/ubuntu/Downloads/0099999.pt"  #"outputs/029/checkpoints/0004999.pt"
         self.cfg_scale = 7.5
