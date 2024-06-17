@@ -6,6 +6,7 @@ from copy import deepcopy
 from collections import OrderedDict
 import logging
 import argparse
+import json
 
 from tqdm import tqdm
 
@@ -232,6 +233,10 @@ def main():
                     )  # Make results folder (holds all experiment subfolders)
         experiment_index = len(glob(f"{cfg.outputs}/*"))
         experiment_dir = f"{cfg.outputs}/{experiment_index:03d}"  # Create an experiment folder
+        os.makedirs(experiment_dir, exist_ok=True)
+        # write config to json
+        with open(os.path.join(experiment_dir, 'config.json'), 'w') as f:
+            f.write(json.dumps(cfg.__dict__, indent=2, sort_keys=False))
         checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(experiment_dir)

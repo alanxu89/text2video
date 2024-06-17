@@ -5,6 +5,7 @@ from copy import deepcopy
 from collections import OrderedDict
 import logging
 import argparse
+import json
 
 from tqdm import tqdm
 
@@ -63,9 +64,12 @@ def main():
     torch.set_default_dtype(dtype)
 
     # Setup an experiment folder:
+    save_dir = os.path.join(cfg.root, cfg.preprocessed_dir)
     if rank == 0:
-        os.makedirs(os.path.join(cfg.root, cfg.preprocessed_dir),
-                    exist_ok=True)
+        os.makedirs(save_dir, exist_ok=True)
+        # write config to json
+        with open(os.path.join(save_dir, 'config.json'), 'w') as f:
+            f.write(json.dumps(cfg.__dict__, indent=2, sort_keys=False))
 
     # prepare dataset
     dataset = DatasetFromCSV(cfg.data_path,
@@ -140,7 +144,6 @@ def main():
                 # if encode only, we save results to file
                 for idx in range(len(video_ids)):
                     vid = video_ids[idx]
-                    save_dir = os.path.join(cfg.root, cfg.preprocessed_dir)
                     save_fpath = os.path.join(save_dir, vid + ".pt")
                     if not os.path.exists(
                             save_fpath) or cfg.override_preprocessed:
