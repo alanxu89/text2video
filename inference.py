@@ -131,7 +131,7 @@ def main():
     vae = vae.to(device).eval()
     model = model.to(device).eval()
 
-    scheduler = IDDPM(num_sampling_steps=250,
+    scheduler = IDDPM(num_sampling_steps=cfg.inference_sampling_steps,
                       learn_sigma=not cfg.use_videoldm,
                       cfg_scale=cfg.cfg_scale)
 
@@ -185,7 +185,10 @@ def main():
             print("done\n")
 
         for idx, sample in enumerate(samples):
-            print(f"Prompt:\n {batch_prompts[idx*cfg.num_frames]}")
+            prompt_idx = idx
+            if cfg.use_videoldm:
+                prompt_idx = prompt_idx * cfg.num_frames
+            print(f"Prompt:\n {batch_prompts[prompt_idx]}")
             save_path = os.path.join(save_dir, f"sample_{sample_idx}")
             save_sample(sample, fps=6, save_path=save_path, normalize=False)
             save_sample(sample[:, :1],

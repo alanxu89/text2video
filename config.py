@@ -21,12 +21,12 @@ class Config:
         # for video ldm temporal layers
         self.num_temp_heads = 8
 
-        # self.depth = 24
-        # self.hidden_size = 1024
-        # self.num_heads = 16
-        self.depth = 12
-        self.hidden_size = 768
-        self.num_heads = 12
+        self.depth = 24
+        self.hidden_size = 1024
+        self.num_heads = 16
+        # self.depth = 12
+        # self.hidden_size = 768
+        # self.num_heads = 12
 
         self.patch_size = (1, 2, 2)
 
@@ -75,7 +75,7 @@ class Config:
         self.sp_size = 1
 
         # Others
-        self.seed = 123456
+        self.seed = 234
         self.outputs = "outputs"
         self.wandb = False
 
@@ -92,5 +92,6 @@ class Config:
 
         # inference
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "/home/ubuntu/Downloads/0099999.pt"  #"outputs/029/checkpoints/0004999.pt"
-        self.cfg_scale = 7.5
+        self.ckpt_path = "/home/ubuntu/Downloads/0059999.pt"  #"outputs/029/checkpoints/0004999.pt"
+        self.cfg_scale = 2.0
+        self.inference_sampling_steps = 250
