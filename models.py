@@ -117,7 +117,7 @@ class STDiTBlock(nn.Module):
             drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
 
         # similar to the Conv3D layers in Align your Latents paper
-        self.use_3dconv = False
+        self.use_3dconv = use_3dconv
         if self.use_3dconv:
             k, p = (3, 3, 3), (1, 1, 1)
             self.conv1 = nn.Sequential(

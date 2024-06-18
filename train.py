@@ -373,7 +373,7 @@ def main():
 
     scheduler = IDDPM(timestep_respacing="", learn_sigma=not cfg.use_videoldm)
 
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
+    opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=0)
 
     num_steps_per_epoch = len(dataloader)
     logger.info("Boost model for distributed training")
