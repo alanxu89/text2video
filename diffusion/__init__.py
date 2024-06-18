@@ -96,14 +96,13 @@ def forward_with_cfg(model, x, t, y, cfg_scale, cfg_channels=None, **kwargs):
     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
     half = x[:len(x) // 2]
     combined = torch.cat([half, half], dim=0)
-    if "encoder_attention_mask" in kwargs and kwargs[
-            "encoder_attention_mask"] is not None:
-        if len(kwargs["encoder_attention_mask"]) != len(x):
-            kwargs["encoder_attention_mask"] = torch.cat([
-                kwargs["encoder_attention_mask"],
-                kwargs["encoder_attention_mask"]
-            ],
-                                                         dim=0).to(x.device)
+
+    for key in kwargs:
+        if "mask" in key and kwargs[key] is not None:
+            if len(kwargs[key]) != len(x):
+                # repeat keys for cfg
+                kwargs[key] = torch.cat([kwargs[key], kwargs[key]],
+                                        dim=0).to(x.device)
 
     model_out = model.forward(combined, t, y, **kwargs)
     if not isinstance(model_out, torch.Tensor):
