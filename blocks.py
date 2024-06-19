@@ -67,6 +67,7 @@ class Attention(nn.Module):
                 x: torch.Tensor,
                 attn_bias: torch.Tensor = None) -> torch.Tensor:
         B, N, C = x.shape
+        x_dtype = x.dtype
 
         # qkv project and reshape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
@@ -83,6 +84,10 @@ class Attention(nn.Module):
         if self.enable_flashattn:
             from flash_attn import flash_attn_func
 
+            if x_dtype == torch.float32:
+                q = q.to(torch.float16)
+                k = k.to(torch.float16)
+                v = v.to(torch.float16)
             x = flash_attn_func(
                 q,
                 k,
@@ -90,6 +95,9 @@ class Attention(nn.Module):
                 dropout_p=self.attn_drop.p if self.training else 0,
                 softmax_scale=self.scale,
             )  # [B, N, num_heads, head_dim]
+            if x_dtype == torch.float32:
+                x = x.to(x_dtype)
+
         elif self.enable_mem_eff_attn:
             import xformers.ops as xops
 
