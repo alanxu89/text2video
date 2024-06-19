@@ -294,7 +294,6 @@ def main():
         # video VAE
         vae = VideoAutoEncoderKL(cfg.vae_pretrained,
                                  cfg.subfolder,
-                                 cfg.vae_scaling_factor,
                                  dtype=torch.float16).to(device)
         vae.eval()
         latent_size = vae.get_latent_size(input_size)

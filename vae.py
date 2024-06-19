@@ -10,7 +10,6 @@ class VideoAutoEncoderKL(nn.Module):
     def __init__(self,
                  pretrained_model,
                  subfolder="",
-                 scaling_factor=0.13025,
                  dtype=torch.float16,
                  micro_batch_size=None,
                  patch_size=(1, 8, 8),
@@ -22,7 +21,7 @@ class VideoAutoEncoderKL(nn.Module):
                                                        subfolder=subfolder,
                                                        torch_dtype=dtype)
         self.dtype = dtype
-        self.scaling_factor = scaling_factor
+        self.scaling_factor = self.image_vae.config.scaling_factor
         self.out_channels = self.image_vae.config.latent_channels
         self.micro_batch_size = micro_batch_size
         self.patch_size = patch_size  # down factor f = 2^3 = 8

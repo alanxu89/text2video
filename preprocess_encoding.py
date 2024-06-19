@@ -92,10 +92,7 @@ def main():
     print(f"Total batch size: {total_batch_size}")
 
     # video VAE
-    vae = VideoAutoEncoderKL(cfg.vae_pretrained,
-                             cfg.subfolder,
-                             cfg.vae_scaling_factor,
-                             dtype=dtype)
+    vae = VideoAutoEncoderKL(cfg.vae_pretrained, cfg.subfolder, dtype=dtype)
 
     # text encoder
     if "t5" in cfg.textenc_pretrained:

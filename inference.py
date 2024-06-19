@@ -79,7 +79,6 @@ def main():
     # model
     vae = VideoAutoEncoderKL(cfg.vae_pretrained,
                              cfg.subfolder,
-                             cfg.vae_scaling_factor,
                              micro_batch_size=8,
                              dtype=dtype)
     input_size = (cfg.num_frames, *cfg.image_size)
