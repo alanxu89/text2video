@@ -6,4 +6,4 @@ This is the main model used by this repo, described in [models.py](models.py) an
 The second model architecture we implemented is to add temporal layers to existing SD unets, described in [videoldm.py](videoldm.py) and [videoldm_blocks.py](videoldm_blocks.py). This architecture is first proposed in Align your Latents paper (https://arxiv.org/abs/2304.08818). A reference implementation is given by https://github.com/srpkdyy/VideoLDM and we adapt it to our unified training framework.
 
 ## data preprocessing
-We choose to preprocess video data with pretrained VAE and captions with existing text encoder first. In the next step, the model (STDiT or VideoLDM) loads the preprocessed data and do the diffusion training in latent space. 
+We choose to preprocess video data with pretrained VAE and captions with existing text encoder first, as in [preprocess_encoding.py](preprocess_encoding.py). Next, the model (STDiT or VideoLDM) loads the preprocessed data and do the diffusion training in latent space.
