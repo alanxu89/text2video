@@ -131,6 +131,7 @@ def main():
     model = model.to(device).eval()
 
     scheduler = IDDPM(num_sampling_steps=cfg.inference_sampling_steps,
+                      noise_schedule=cfg.noise_schedule,
                       learn_sigma=not cfg.use_videoldm,
                       cfg_scale=cfg.cfg_scale)
 

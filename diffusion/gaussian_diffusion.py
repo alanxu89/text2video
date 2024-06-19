@@ -115,8 +115,8 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps):
         scale = 1000 / num_diffusion_timesteps
         return get_beta_schedule(
             "linear",
-            beta_start=scale * 0.00085,
-            beta_end=scale * 0.012,
+            beta_start=scale * 0.0001,
+            beta_end=scale * 0.02,
             num_diffusion_timesteps=num_diffusion_timesteps,
         )
     elif schedule_name == "squaredcos_cap_v2":

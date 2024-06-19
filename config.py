@@ -14,6 +14,8 @@ class Config:
         self.frame_interval = 4
         self.image_size = (256, 256)
 
+        self.noise_schedule = "linear"  #"squaredcos_cap_v2"
+
         self.use_videoldm = False
         self.image_finetune = False
         self.use_attention_mask = False

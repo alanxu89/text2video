@@ -370,7 +370,9 @@ def main():
     model = model.to(device, dtype)
     model.train()
 
-    scheduler = IDDPM(timestep_respacing="", learn_sigma=not cfg.use_videoldm)
+    scheduler = IDDPM(timestep_respacing="",
+                      noise_schedule=cfg.noise_schedule,
+                      learn_sigma=not cfg.use_videoldm)
 
     opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=0)
 
