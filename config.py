@@ -5,8 +5,8 @@ class Config:
 
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
-        self.preprocessed_dir = "encoder_out_15"
-        self.text_key = "short_text"  # "text", "short_text", "category"
+        self.preprocessed_dir = "encoder_out_16"
+        self.text_key = "text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
 
@@ -30,12 +30,12 @@ class Config:
 
         self.patch_size = (1, 2, 2)
 
-        self.enable_temporal_attn = False
+        self.enable_temporal_attn = True
         self.joint_st_attn = False
         self.use_3dconv = False
-        self.enable_mem_eff_attn = True
-        self.enable_flashattn = False
-        self.enable_grad_ckpt = True
+        self.enable_mem_eff_attn = False
+        self.enable_flashattn = True
+        self.enable_grad_ckpt = False
 
         # for classifier-free guidance
         self.token_drop_prob = 0.1
@@ -44,20 +44,19 @@ class Config:
 
         # pretrained vae
         # self.vae_pretrained = "stabilityai/sd-vae-ft-ema"
-        # self.vae_scaling_factor = 0.18215
-        # self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
-        # self.vae_scaling_factor = 0.13025
-        self.vae_pretrained = "runwayml/stable-diffusion-v1-5"
-        self.subfolder = "vae"
-        self.vae_scaling_factor = 0.18215
+        # self.subfolder = ""
+        self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
+        self.subfolder = ""
+        # self.vae_pretrained = "runwayml/stable-diffusion-v1-5"
+        # self.subfolder = "vae"
 
         # text encoder
-        # self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"
-        # self.model_max_length = 512
-        # self.text_encoder_output_dim = 4096
-        self.textenc_pretrained = "runwayml/stable-diffusion-v1-5"
-        self.model_max_length = 77
-        self.text_encoder_output_dim = 768
+        self.textenc_pretrained = "DeepFloyd/t5-v1_1-xxl"
+        self.model_max_length = 256  # only ~1% of captions exceeds this number
+        self.text_encoder_output_dim = 4096
+        # self.textenc_pretrained = "runwayml/stable-diffusion-v1-5"
+        # self.model_max_length = 77
+        # self.text_encoder_output_dim = 768
 
         # Define dataset
         # self.root = "/home/ubuntu/Documents/webvid/data/videos"
@@ -92,6 +91,6 @@ class Config:
 
         # inference
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "/home/ubuntu/Downloads/0059999.pt"  #"outputs/029/checkpoints/0004999.pt"
+        self.ckpt_path = "/home/ubuntu/Downloads/0009999.pt"  #"outputs/029/checkpoints/0004999.pt"
         self.cfg_scale = 2.0
         self.inference_sampling_steps = 250
