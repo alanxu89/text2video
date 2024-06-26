@@ -429,7 +429,7 @@ class STDiT(nn.Module):
             Nw=self.num_spatial_w,
             Pt=self.patch_size[0],
             Ph=self.patch_size[1],
-            Pw=self.patch_size[1],
+            Pw=self.patch_size[2],
             C=self.out_channels,
         )
 
