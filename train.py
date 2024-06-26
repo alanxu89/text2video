@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
@@ -222,7 +223,8 @@ def main():
     dist.init_process_group("nccl")
     rank = dist.get_rank()
     device = rank % torch.cuda.device_count()
-    torch.manual_seed(cfg.seed)
+    seed = cfg.seed * dist.get_world_size() + rank
+    torch.manual_seed(seed)
     torch.cuda.set_device(device)
     dtype = to_torch_dtype(cfg.dtype)
     torch.set_default_dtype(dtype)
@@ -262,12 +264,15 @@ def main():
     sampler = StatefulDistributedSampler(dataset,
                                          num_replicas=dist.get_world_size(),
                                          rank=dist.get_rank(),
-                                         shuffle=True)
+                                         shuffle=True,
+                                         seed=cfg.seed)
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
         num_workers=cfg.num_workers,
         sampler=sampler,
+        pin_memory=True,
+        drop_last=True,
     )
 
     logger.info(f"Dataset contains {len(dataset):,} videos ({cfg.data_path})")
@@ -368,6 +373,9 @@ def main():
 
     # 4.3. move to device
     model = model.to(device, dtype)
+
+    model = DDP(model, device_ids=[rank])
+
     model.train()
 
     scheduler = IDDPM(timestep_respacing="",
@@ -389,7 +397,7 @@ def main():
     if cfg.load is not None:
         logger.info(f"Loading checkpoint {cfg.load}")
         checkpoint = torch.load(cfg.load)
-        model.load_state_dict(checkpoint['model'])
+        model.module.load_state_dict(checkpoint['model'])
         logger.info(f"model weights loaded")
         if not cfg.load_weights_only:
             opt.load_state_dict(checkpoint['opt'])
@@ -399,7 +407,7 @@ def main():
         del checkpoint
 
     if cfg.use_ema:
-        update_ema(ema, model, decay=0, sharded=False)
+        update_ema(ema, model.module, decay=0, sharded=False)
         ema.eval()
 
     # dataloader.sampler.set_start_index(sampler_start_idx)
@@ -506,7 +514,7 @@ def main():
 
                 # Update EMA
                 if cfg.use_ema:
-                    update_ema(ema, model)
+                    update_ema(ema, model.module)
 
                 # Log loss values:
                 all_reduce_mean(loss)
@@ -536,7 +544,7 @@ def main():
                                            1) % cfg.ckpt_every == 0:
                     if rank == 0:
                         model_states = ema.state_dict(
-                        ) if cfg.use_ema else model.state_dict()
+                        ) if cfg.use_ema else model.module.state_dict()
                         checkpoint = {
                             "model": model_states,
                             "opt": opt.state_dict(),
