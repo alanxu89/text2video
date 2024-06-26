@@ -37,7 +37,7 @@ class Config:
         self.use_3dconv = False
         self.enable_mem_eff_attn = False
         self.enable_flashattn = True
-        self.enable_grad_ckpt = False
+        self.enable_grad_ckpt = True
 
         # for classifier-free guidance
         self.token_drop_prob = 0.1
@@ -76,7 +76,7 @@ class Config:
         self.sp_size = 1
 
         # Others
-        self.seed = 234
+        self.seed = 123
         self.outputs = "outputs"
         self.wandb = False
 
@@ -88,11 +88,11 @@ class Config:
         self.accum_iter = 4
 
         self.batch_size = 2
-        self.lr = 8e-5
-        self.grad_clip = 1.0
+        self.lr = 3e-5
+        self.grad_clip = 0.3
 
         # inference
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "/home/ubuntu/Downloads/0009999.pt"  #"outputs/029/checkpoints/0004999.pt"
-        self.cfg_scale = 2.0
+        self.ckpt_path = "/home/ubuntu/Downloads/0008999.pt"  #"outputs/029/checkpoints/0004999.pt"
+        self.cfg_scale = 7.5
         self.inference_sampling_steps = 250
