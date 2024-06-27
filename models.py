@@ -73,23 +73,31 @@ class STDiTBlock(nn.Module):
         self.d_s_w = d_s_w
         self.debugprint = debugprint(debug)
 
-        # layer norm for self-attention and mlp
-        self.norm1 = get_layernorm(hidden_size,
-                                   eps=1e-6,
-                                   affine=False,
-                                   use_kernel=False)
-        self.norm2 = get_layernorm(hidden_size,
-                                   eps=1e-6,
-                                   affine=False,
-                                   use_kernel=False)
+        # layer norm for spatial-attn, temp-attn cross-attn and mlp
+        self.norm_s = get_layernorm(hidden_size,
+                                    eps=1e-6,
+                                    affine=False,
+                                    use_kernel=False)
+        self.norm_t = get_layernorm(hidden_size,
+                                    eps=1e-6,
+                                    affine=False,
+                                    use_kernel=False)
+        self.norm_ca = get_layernorm(hidden_size,
+                                     eps=1e-6,
+                                     affine=False,
+                                     use_kernel=False)
+        self.norm_mlp = get_layernorm(hidden_size,
+                                      eps=1e-6,
+                                      affine=False,
+                                      use_kernel=False)
 
         # why not nn.Linear with no bias?
         # scale, shift and gate parameters for self-attention and mlp
         self.scale_shift_table = nn.Parameter(
-            torch.randn(6, hidden_size) / hidden_size**0.5)
+            torch.randn(9, hidden_size) / hidden_size**0.5)
         # # DiT
         # self.adaLN_modulation = nn.Sequential(
-        #     nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size, bias=True))
+        #     nn.SiLU(), nn.Linear(hidden_size, 9 * hidden_size, bias=True))
 
         # spatial-temporal attention
         self.s_attn = Attention(hidden_size,
@@ -139,34 +147,42 @@ class STDiTBlock(nn.Module):
         B, N, C = x.shape
 
         # modulation for t
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-            self.scale_shift_table[None] + t.reshape(B, 6, -1)).chunk(6, dim=1)
+        (shift_msa_s, scale_msa_s, gate_msa_s, shift_msa_t, scale_msa_t,
+         gate_msa_t, shift_mlp, scale_mlp,
+         gate_mlp) = (self.scale_shift_table[None] +
+                      t.reshape(B, 9, -1)).chunk(9, dim=1)
 
-        x_m = modulate(self.norm1(x), shift_msa, scale_msa)
+        x_m_s = modulate(self.norm_s(x), shift_msa_s, scale_msa_s)
 
         # spatial branch
-        self.debugprint("spatial branch", x_m.shape)
-        x_s = rearrange(x_m, "b (t s) c -> (b t) s c", t=self.d_t, s=self.d_s)
+        self.debugprint("spatial branch", x_m_s.shape)
+        x_s = rearrange(x_m_s,
+                        "b (t s) c -> (b t) s c",
+                        t=self.d_t,
+                        s=self.d_s)
         self.debugprint(x_s.shape)
         x_s = self.s_attn(x_s)
         self.debugprint(x_s.shape)
         x_s = rearrange(x_s, "(b t) s c -> b (t s) c", t=self.d_t, s=self.d_s)
         self.debugprint(x_s.shape)
-        x = x + self.drop_path(gate_msa * x_s)
+        x = x + self.drop_path(gate_msa_s * x_s)
         self.debugprint(x.shape)
 
         # temporal branch
         if self.enable_temporal_attn:
-            self.debugprint("temporal branch")
-            self.debugprint(x.shape)
-            x_t = rearrange(x,
+            x_m_t = modulate(self.norm_t(x), shift_msa_t, scale_msa_t)
+
+            self.debugprint("temporal branch", x_m_t.shape)
+            x_t = rearrange(x_m_t,
                             "b (t s) c -> (b s) t c",
                             t=self.d_t,
                             s=self.d_s)
             self.debugprint(x_t.shape)
+
             if tpe is not None:
                 self.debugprint("tpe shape:", tpe.shape)
                 x_t = x_t + tpe
+
             if self.joint_st_attn:
                 # joint spatial-temporal with a finite window size
                 if self.use_3dconv:
@@ -202,20 +218,21 @@ class STDiTBlock(nn.Module):
                                 "(b s) t c -> b (t s) c",
                                 t=self.d_t,
                                 s=self.d_s)
+
             self.debugprint(x_t.shape)
-            x = x + self.drop_path(gate_msa * x_t)
+            x = x + self.drop_path(gate_msa_t * x_t)
             self.debugprint(x.shape)
 
         # cross attention
         self.debugprint("cross attn")
         self.debugprint(x.shape, y.shape)
-        x = x + self.cross_attn(x, y, mask)
+        x = x + self.cross_attn(self.norm_ca(x), y, mask)
         self.debugprint(x.shape)
 
         # mlp
         self.debugprint("feed-forward mlp")
-        x = x + self.drop_path(
-            gate_mlp * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp)))
+        x = x + self.drop_path(gate_mlp * self.mlp(
+            modulate(self.norm_mlp(x), shift_mlp, scale_mlp)))
         self.debugprint(x.shape)
 
         return x
@@ -282,7 +299,7 @@ class STDiT(nn.Module):
         # a shared adaLN for all blocks
         self.t_block = nn.Sequential(
             nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size, bias=True),
+            nn.Linear(hidden_size, 9 * hidden_size, bias=True),
         )
         self.y_embedder = CaptionEmbedder(
             in_channels=caption_channels,
@@ -371,7 +388,7 @@ class STDiT(nn.Module):
         self.debugprint(t.shape)
         t = self.t_embedder(t, x.dtype)  # [B, C]
         self.debugprint(t.shape)
-        t0 = self.t_block(t)  #[B, 6*C]
+        t0 = self.t_block(t)  #[B, 9*C]
         self.debugprint(t0.shape)
 
         self.debugprint("y shapes")
