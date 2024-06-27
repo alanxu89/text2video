@@ -85,11 +85,11 @@ class Config:
         self.ckpt_every = 10000
         self.load = None  #"outputs/027/checkpoints/0039999.pt"
         self.load_weights_only = False
-        self.accum_iter = 4
+        self.accum_iter = 1
 
         self.batch_size = 2
         self.lr = 3e-5
-        self.grad_clip = 0.3
+        self.grad_clip = 1.0
 
         # inference
         self.save_dir = "outputs/samples/"
