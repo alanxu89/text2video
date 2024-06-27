@@ -48,6 +48,16 @@ def requires_grad(model: torch.nn.Module, flag: bool = True) -> None:
         p.requires_grad = flag
 
 
+def print_grad_max(model):
+    for key, param in model.named_parameters():
+        if param.requires_grad:
+            if param.grad is not None:
+                val = torch.abs(param.grad).max()
+                print(key, val)
+            else:
+                print(key, "grad is None")
+
+
 @torch.no_grad()
 def update_ema(ema_model: torch.nn.Module,
                model: torch.nn.Module,
@@ -491,16 +501,20 @@ def main():
                 # with torch.autograd.detect_anomaly():
                 scaler.scale(loss).backward()
                 # loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(),
-                                         cfg.grad_clip,
-                                         norm_type=2)
 
                 if global_step % cfg.accum_iter == 0:
+                    # Unscales the gradients of optimizer's assigned params in-place
+                    scaler.unscale_(opt)
+                    # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+                    nn.utils.clip_grad_norm_(model.parameters(),
+                                             cfg.grad_clip,
+                                             norm_type=2)
 
                     # scaler.step() first unscales gradients of the optimizer's params.
                     # If gradients don't contain infs/NaNs, optimizer.step() is then called,
                     # otherwise, optimizer.step() is skipped.
                     scaler.step(opt)
+
                     # Updates the scale for next iteration.
                     scaler.update()
 
