@@ -1,5 +1,6 @@
 from typing import Callable, List, Optional, Tuple, Union
 import math
+from functools import partial
 
 import numpy as np
 
@@ -8,6 +9,8 @@ from torch import nn as nn
 import torch.nn.functional as F
 
 from timm.models.vision_transformer import Mlp
+
+from utils import forward_hook_func, backward_hook_func
 
 approx_gelu = lambda: nn.GELU(approximate="tanh")
 
@@ -45,6 +48,7 @@ class Attention(nn.Module):
         norm_layer: nn.Module = nn.LayerNorm,
         enable_flashattn: bool = False,
         enable_mem_eff_attn: bool = False,
+        register_hook=False,
     ) -> None:
         super().__init__()
         assert dim % num_heads == 0, 'dim should be divisible by num_heads'
@@ -62,6 +66,12 @@ class Attention(nn.Module):
         self.attn_drop = nn.Dropout(p=attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(p=proj_drop)
+
+        if register_hook:
+            self.qkv.register_forward_hook(
+                partial(forward_hook_func, name="qkv"))
+            self.qkv.register_full_backward_hook(
+                partial(backward_hook_func, name="qkv"))
 
     def forward(self,
                 x: torch.Tensor,
@@ -137,6 +147,7 @@ class MultiHeadCrossAttention(nn.Module):
                  attn_drop=0.0,
                  proj_drop=0.0,
                  d_kv=None,
+                 register_hook=False,
                  *args,
                  **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -152,6 +163,22 @@ class MultiHeadCrossAttention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(d_model, d_model)
         self.proj_drop = nn.Dropout(proj_drop)
+
+        if register_hook:
+            self.q_linear.register_forward_hook(
+                partial(forward_hook_func, name="q_linear"))
+            self.q_linear.register_full_backward_hook(
+                partial(backward_hook_func, name="q_linear"))
+
+            self.kv_linear.register_forward_hook(
+                partial(forward_hook_func, name="kv_linear"))
+            self.kv_linear.register_full_backward_hook(
+                partial(backward_hook_func, name="kv_linear"))
+
+            self.proj.register_forward_hook(
+                partial(forward_hook_func, name="proj"))
+            self.proj.register_full_backward_hook(
+                partial(backward_hook_func, name="proj"))
 
     def forward(self, x, c, mask=None):
         B, N, C = x.shape

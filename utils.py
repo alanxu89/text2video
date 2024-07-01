@@ -120,3 +120,33 @@ def readtexts_from_file(fpath):
                 break
             texts.append(line)
     return texts
+
+
+def get_mmm(x: torch.Tensor):
+    return x.max().cpu(), x.mean().cpu(), x.median().cpu()
+
+
+def get_abs_mmm(x: torch.Tensor):
+    x1 = x.abs()
+    return x1.max().cpu(), x1.mean().cpu(), x1.median().cpu()
+
+
+def forward_hook_func(module, inputs, outputs, name=""):
+    print(f"forward hook: {name}")
+    print("inputs", len(inputs))
+    for inp in inputs:
+        print(get_abs_mmm(inp))
+    print("outs")
+    print(get_abs_mmm(outputs))
+    print("-------")
+
+
+def backward_hook_func(module, grad_input, grad_output, name=""):
+    print(f"backward hook: {name}")
+    print("inputs", len(grad_input))
+    for inp in grad_input:
+        print(get_abs_mmm(inp))
+    print("outs", len(grad_output))
+    for out in grad_output:
+        print(get_abs_mmm(out))
+    print("-------")
