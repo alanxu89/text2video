@@ -6,7 +6,7 @@ class Config:
         self.override_preprocessed = False
         self.preprocess_batch_size = 1
         self.preprocessed_dir = "encoder_out_16"
-        self.text_key = "text"  # "text", "short_text", "category"
+        self.text_key = "short_text"  # "text", "short_text", "category"
 
         self.use_preprocessed_data = True
 
@@ -23,12 +23,12 @@ class Config:
         # for video ldm temporal layers
         self.num_temp_heads = 8
 
-        self.depth = 24
-        self.hidden_size = 1024
-        self.num_heads = 16
-        # self.depth = 12
-        # self.hidden_size = 768
-        # self.num_heads = 12
+        # self.depth = 24
+        # self.hidden_size = 1024
+        # self.num_heads = 16
+        self.depth = 12
+        self.hidden_size = 768
+        self.num_heads = 12
 
         self.patch_size = (1, 2, 2)
 
@@ -45,10 +45,10 @@ class Config:
         self.use_ema = True
 
         # pretrained vae
-        # self.vae_pretrained = "stabilityai/sd-vae-ft-ema"
-        # self.subfolder = ""
-        self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
+        self.vae_pretrained = "stabilityai/sd-vae-ft-ema"
         self.subfolder = ""
+        # self.vae_pretrained = "madebyollin/sdxl-vae-fp16-fix"
+        # self.subfolder = ""
         # self.vae_pretrained = "runwayml/stable-diffusion-v1-5"
         # self.subfolder = "vae"
 
@@ -93,6 +93,6 @@ class Config:
 
         # inference
         self.save_dir = "outputs/samples/"
-        self.ckpt_path = "/home/ubuntu/Downloads/0008999.pt"  #"outputs/029/checkpoints/0004999.pt"
-        self.cfg_scale = 7.5
+        self.ckpt_path = "/home/ubuntu/Downloads/0099999.pt"  #"outputs/029/checkpoints/0004999.pt"
+        self.cfg_scale = 4.0
         self.inference_sampling_steps = 250
