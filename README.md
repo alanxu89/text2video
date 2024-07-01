@@ -9,6 +9,9 @@ The second model architecture we implemented is to add temporal layers to existi
 We choose to preprocess video data with pretrained VAE and captions with existing text encoder first, as in [preprocess_encoding.py](preprocess_encoding.py). Next, the model (STDiT or VideoLDM) loads the preprocessed data and do the diffusion training in latent space.
 
 ## results
-[aerial shot of a small rocky island](assets/sample_0.mp4)
+aerial shot of a small rocky island
+[![Watch the video](https://raw.githubusercontent.com/alanxu/mysora/main/assets/sample_0.mp4)]
 
-[a luxury tourist island with a pier and bungalows](assets/sample_1.mp4)
+a luxury tourist island with a pier and bungalows
+[![Watch the video](https://raw.githubusercontent.com/alanxu/mysora/main/assets/sample_1.mp4)]
+
