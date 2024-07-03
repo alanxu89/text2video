@@ -14,6 +14,7 @@ from blocks import (
     get_layernorm,
     Attention,
     MultiHeadCrossAttention,
+    Conv3DLayer,
     PatchEmbed3D,
     TimestepEmbedder,
     CaptionEmbedder,
@@ -108,19 +109,9 @@ class STDiTBlock(nn.Module):
         # temporal layer
         if temporal_layer_type == "conv3d":
             # similar to the Conv3D layers in Align your Latents paper
-            k, p = (3, 3, 3), (1, 1, 1)
-            self.conv1 = nn.Sequential(
-                nn.GroupNorm(32, hidden_size),
-                nn.SiLU(),
-                nn.Conv3d(hidden_size, 256, kernel_size=k, stride=1,
-                          padding=p),
-            )
-            self.conv2 = nn.Sequential(
-                nn.GroupNorm(32, 256),
-                nn.SiLU(),
-                nn.Conv3d(256, hidden_size, kernel_size=k, stride=1,
-                          padding=p),
-            )
+            self.conv3d = Conv3DLayer(dim=hidden_size,
+                                      inner_dim=256,
+                                      enable_proj_out=True)
         elif (temporal_layer_type
               == "temporal_only_attn") or (temporal_layer_type
                                            == "spatial_temporal_attn"):
@@ -189,16 +180,14 @@ class STDiTBlock(nn.Module):
 
             if self.temporal_layer_type == "conv3d":
                 self.debugprint("use conv3D")
-                # rearange and then apply conv
+                # rearrange and then apply conv and then rearrange back
                 x_t = rearrange(x_t,
                                 "(b s_h s_w) t c -> b c t s_h s_w",
                                 t=self.d_t,
                                 s_h=self.d_s_h,
                                 s_w=self.d_s_w)
                 self.debugprint(x_t.shape)
-                x_t = self.conv1(x_t)
-                self.debugprint(x_t.shape)
-                x_t = self.conv2(x_t)
+                x_t = self.conv3d(x_t)
                 self.debugprint(x_t.shape)
                 x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
                 self.debugprint(x_t.shape)

@@ -35,6 +35,54 @@ def get_layernorm(hidden_size: torch.Tensor, eps: float, affine: bool,
         return nn.LayerNorm(hidden_size, eps, elementwise_affine=affine)
 
 
+class Conv3DLayer(nn.Module):
+
+    def __init__(self, dim, inner_dim, enable_proj_out, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        inner_dim1 = inner_dim
+        self.block1 = nn.Sequential(
+            nn.GroupNorm(32, dim),
+            nn.SiLU(),
+            nn.Conv3d(dim,
+                      inner_dim1,
+                      kernel_size=(3, 3, 3),
+                      stride=1,
+                      padding=(1, 1, 1)),
+        )
+
+        inner_dim2 = inner_dim if enable_proj_out else dim
+        self.block2 = nn.Sequential(
+            nn.GroupNorm(32, inner_dim1),
+            nn.SiLU(),
+            nn.Conv3d(inner_dim1,
+                      inner_dim2,
+                      kernel_size=(3, 3, 3),
+                      stride=1,
+                      padding=(1, 1, 1)),
+        )
+
+        self.proj_out = None
+        if enable_proj_out:
+            # 1x1x1 convolution
+            self.proj_out = nn.Sequential(
+                nn.GroupNorm(32, inner_dim2),
+                nn.SiLU(),
+                nn.Conv3d(inner_dim2,
+                          dim,
+                          kernel_size=(1, 1, 1),
+                          stride=1,
+                          padding=0),
+            )
+
+    def forward(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        if self.proj_out is not None:
+            x = self.proj_out(x)
+
+        return x
+
+
 class Attention(nn.Module):
 
     def __init__(
