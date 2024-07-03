@@ -107,7 +107,6 @@ class Attention(nn.Module):
             )  # [B, N, num_heads, head_dim]
             if x_dtype == torch.float32:
                 x = x.to(x_dtype)
-
         elif self.enable_mem_eff_attn:
             import xformers.ops as xops
 
@@ -187,6 +186,7 @@ class MultiHeadCrossAttention(nn.Module):
         kv = self.kv_linear(c).reshape(1, -1, 2, self.num_heads, self.head_dim)
         k, v = kv.unbind(2)
 
+        # default to use memory_efficient_attention
         import xformers.ops as xops
         attn_bias = None
         if mask is not None:

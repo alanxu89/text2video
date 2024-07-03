@@ -51,8 +51,7 @@ class STDiTBlock(nn.Module):
         mlp_ratio=4.0,
         drop_path=0.0,
         enable_temporal_attn=True,
-        joint_st_attn=False,
-        use_3dconv=False,
+        temporal_layer_type="conv3d",
         enable_mem_eff_attn=False,
         enable_flashattn=False,
         enable_layernorm_kernel=False,
@@ -66,7 +65,7 @@ class STDiTBlock(nn.Module):
         self.hidden_size = hidden_size
         self.enable_flashattn = enable_flashattn
         self.enable_temporal_attn = enable_temporal_attn
-        self.joint_st_attn = joint_st_attn
+        self.temporal_layer_type = temporal_layer_type
         self.d_s = d_s
         self.d_t = d_t
         self.d_s_h = d_s_h
@@ -99,34 +98,16 @@ class STDiTBlock(nn.Module):
         # self.adaLN_modulation = nn.Sequential(
         #     nn.SiLU(), nn.Linear(hidden_size, 9 * hidden_size, bias=True))
 
-        # spatial-temporal attention
+        # spatial attention
         self.s_attn = Attention(hidden_size,
                                 num_heads=num_heads,
                                 qkv_bias=True,
                                 enable_flashattn=enable_flashattn,
                                 enable_mem_eff_attn=enable_mem_eff_attn)
-        self.t_attn = Attention(hidden_size,
-                                num_heads=num_heads,
-                                qkv_bias=True,
-                                enable_flashattn=enable_flashattn,
-                                enable_mem_eff_attn=enable_mem_eff_attn)
 
-        # cross attention between x and y(text prompts)
-        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads)
-
-        # mlp for feedforward network
-        self.mlp = Mlp(in_features=hidden_size,
-                       hidden_features=int(hidden_size * mlp_ratio),
-                       act_layer=approx_gelu,
-                       drop=0)
-
-        # a shared drop out for all?
-        self.drop_path = DropPath(
-            drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
-
-        # similar to the Conv3D layers in Align your Latents paper
-        self.use_3dconv = use_3dconv
-        if self.use_3dconv:
+        # temporal layer
+        if temporal_layer_type == "conv3d":
+            # similar to the Conv3D layers in Align your Latents paper
             k, p = (3, 3, 3), (1, 1, 1)
             self.conv1 = nn.Sequential(
                 nn.GroupNorm(32, hidden_size),
@@ -140,6 +121,29 @@ class STDiTBlock(nn.Module):
                 nn.Conv3d(256, hidden_size, kernel_size=k, stride=1,
                           padding=p),
             )
+        elif (temporal_layer_type
+              == "temporal_only_attn") or (temporal_layer_type
+                                           == "spatial_temporal_attn"):
+            self.t_attn = Attention(hidden_size,
+                                    num_heads=num_heads,
+                                    qkv_bias=True,
+                                    enable_flashattn=enable_flashattn,
+                                    enable_mem_eff_attn=enable_mem_eff_attn)
+        else:
+            self.t_attn = None
+
+        # cross attention between x and y(text prompts)
+        self.cross_attn = MultiHeadCrossAttention(hidden_size, num_heads)
+
+        # mlp for feedforward network
+        self.mlp = Mlp(in_features=hidden_size,
+                       hidden_features=int(hidden_size * mlp_ratio),
+                       act_layer=approx_gelu,
+                       drop=0)
+
+        # a shared drop out for all?
+        self.drop_path = DropPath(
+            drop_prob=drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x, y, t, mask=None, tpe=None, st_attn_bias=None):
         self.debugprint("inside ", self.__class__)
@@ -183,33 +187,22 @@ class STDiTBlock(nn.Module):
                 self.debugprint("tpe shape:", tpe.shape)
                 x_t = x_t + tpe
 
-            if self.joint_st_attn:
-                # joint spatial-temporal with a finite window size
-                if self.use_3dconv:
-                    self.debugprint("use conv3D")
-                    # rearange and then apply conv
-                    x_t = rearrange(x_t,
-                                    "(b s_h s_w) t c -> b c t s_h s_w",
-                                    t=self.d_t,
-                                    s_h=self.d_s_h,
-                                    s_w=self.d_s_w)
-                    self.debugprint(x_t.shape)
-                    x_t = self.conv1(x_t)
-                    self.debugprint(x_t.shape)
-                    x_t = self.conv2(x_t)
-                    self.debugprint(x_t.shape)
-                    x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
-                    self.debugprint(x_t.shape)
-                else:
-                    self.debugprint("use self-attn")
-                    # rearange and then apply attention
-                    x_t = rearrange(x_t,
-                                    "(b s) t c -> b (t s) c",
-                                    t=self.d_t,
-                                    s=self.d_s)
-                    self.debugprint(x_t.shape)
-                    x_t = self.t_attn(x_t, st_attn_bias)
-            else:
+            if self.temporal_layer_type == "conv3d":
+                self.debugprint("use conv3D")
+                # rearange and then apply conv
+                x_t = rearrange(x_t,
+                                "(b s_h s_w) t c -> b c t s_h s_w",
+                                t=self.d_t,
+                                s_h=self.d_s_h,
+                                s_w=self.d_s_w)
+                self.debugprint(x_t.shape)
+                x_t = self.conv1(x_t)
+                self.debugprint(x_t.shape)
+                x_t = self.conv2(x_t)
+                self.debugprint(x_t.shape)
+                x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
+                self.debugprint(x_t.shape)
+            elif self.temporal_layer_type == "temporal_only_attn":
                 # temporal-only attention
                 # apply attention and then rearange
                 x_t = self.t_attn(x_t)
@@ -218,6 +211,18 @@ class STDiTBlock(nn.Module):
                                 "(b s) t c -> b (t s) c",
                                 t=self.d_t,
                                 s=self.d_s)
+            elif self.temporal_layer_type == "spatial_temporal_attn":
+                # joint spatial-temporal with a finite window size
+                self.debugprint("use self-attn")
+                # rearange and then apply attention
+                x_t = rearrange(x_t,
+                                "(b s) t c -> b (t s) c",
+                                t=self.d_t,
+                                s=self.d_s)
+                self.debugprint(x_t.shape)
+                x_t = self.t_attn(x_t, st_attn_bias)
+            else:
+                pass
 
             self.debugprint(x_t.shape)
             x = x + self.drop_path(gate_msa_t * x_t)
@@ -259,8 +264,7 @@ class STDiT(nn.Module):
         time_scale=1.0,
         freeze=None,
         enable_temporal_attn=True,
-        joint_st_attn=False,
-        use_3dconv=False,
+        temporal_layer_type="conv3d",
         enable_mem_eff_attn=False,
         enable_flashattn=False,
         enable_layernorm_kernel=False,
@@ -288,6 +292,7 @@ class STDiT(nn.Module):
         self.num_spatial = self.num_spatial_h * self.num_spatial_w
         self.num_patches = self.num_temporal * self.num_spatial
         self.num_heads = num_heads
+        self.temporal_layer_type = temporal_layer_type
 
         self.space_scale = space_scale
         self.time_scale = time_scale
@@ -326,8 +331,7 @@ class STDiT(nn.Module):
                 mlp_ratio=mlp_ratio,
                 drop_path=drop_path[i],
                 enable_temporal_attn=enable_temporal_attn,
-                joint_st_attn=joint_st_attn,
-                use_3dconv=use_3dconv,
+                temporal_layer_type=temporal_layer_type,
                 enable_mem_eff_attn=enable_mem_eff_attn,
                 enable_flashattn=enable_flashattn,
                 enable_layernorm_kernel=enable_layernorm_kernel,
@@ -337,7 +341,7 @@ class STDiT(nn.Module):
         ])
 
         self.st_attn_bias = None
-        if joint_st_attn:
+        if temporal_layer_type == "spatial_temporal_attn":
             st_attn_mask = get_st_attn_mask(T=self.num_temporal,
                                             H=self.num_spatial_h,
                                             W=self.num_spatial_w,
@@ -472,9 +476,12 @@ class STDiT(nn.Module):
         return pos_embed
 
     def initialize_temporal(self):
-        for block in self.blocks:
-            nn.init.constant_(block.t_attn.proj.weight, 0)
-            nn.init.constant_(block.t_attn.proj.bias, 0)
+        if ("attn"
+                in self.temporal_layer_type) or ("attention"
+                                                 in self.temporal_layer_type):
+            for block in self.blocks:
+                nn.init.constant_(block.t_attn.proj.weight, 0)
+                nn.init.constant_(block.t_attn.proj.bias, 0)
 
     def initialize_weights(self):
         # Initialize transformer layers:

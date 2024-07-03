@@ -107,8 +107,8 @@ def main():
             hidden_size=cfg.hidden_size,
             num_heads=cfg.num_heads,
             patch_size=cfg.patch_size,
-            joint_st_attn=cfg.joint_st_attn,
-            use_3dconv=cfg.use_3dconv,
+            enable_temporal_attn=cfg.enable_temporal_attn,
+            temporal_layer_type=cfg.temporal_layer_type,
             enable_mem_eff_attn=cfg.enable_mem_eff_attn,
             enable_flashattn=cfg.enable_flashattn,
             enable_grad_checkpoint=False,
@@ -141,7 +141,7 @@ def main():
     # 4. inference
     # ======================================================
 
-    prompts = load_prompts("assets/texts/mixkit_test_prompts5.txt")
+    prompts = load_prompts("assets/texts/mixkit_test_prompts4.txt")
     sample_idx = 0
     save_dir = os.path.join(cfg.save_dir,
                             datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
@@ -176,7 +176,7 @@ def main():
             if cfg.use_videoldm:
                 samples = samples.reshape(-1, cfg.num_frames,
                                           *z_size).permute(0, 2, 1, 3, 4)
-            for j in range(2):
+            for j in range(len(samples)):
                 save_sample(samples[j, :3, :1],
                             save_path=os.path.join(save_dir, "latents_" +
                                                    str(j) + "_t0"))

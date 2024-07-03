@@ -33,8 +33,9 @@ class Config:
         self.patch_size = (1, 2, 2)
 
         self.enable_temporal_attn = True
-        self.joint_st_attn = False
-        self.use_3dconv = False
+        # "conv3d" or "temporal_only_attn" or "spatial_temporal_attn"
+        self.temporal_layer_type = "conv3d"
+
         self.enable_mem_eff_attn = False
         self.enable_flashattn = True
         self.enable_grad_ckpt = True
