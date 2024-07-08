@@ -83,6 +83,40 @@ class Conv3DLayer(nn.Module):
         return x
 
 
+class DiffLayer(nn.Module):
+
+    def __init__(self, dim, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        concat_dim = 2 * dim
+        self.proj_diff = nn.Conv3d(dim,
+                                   dim,
+                                   kernel_size=(1, 1, 1),
+                                   stride=1,
+                                   padding=0)
+        self.proj_out = nn.Sequential(
+            nn.GroupNorm(32, concat_dim),
+            nn.SiLU(),
+            nn.Conv3d(concat_dim,
+                      dim,
+                      kernel_size=(1, 1, 1),
+                      stride=1,
+                      padding=0),
+        )
+
+    def forward(self, x):
+        """
+        x: [b, c, t, h, w]
+        """
+        # diff_w = F.pad(torch.diff(x, dim=-1), (0, 1), "constant", 0)
+        # diff_h = F.pad(torch.diff(x, dim=-2), (0, 0, 0, 1), "constant", 0)
+        diff = F.pad(torch.diff(x, dim=2), (0, 0, 0, 0, 0, 1), "replicate")
+        diff = self.proj_diff(diff)
+        x = torch.concat([x, diff], dim=1)
+        x = self.proj_out(x)
+
+        return x
+
 class Attention(nn.Module):
 
     def __init__(

@@ -15,6 +15,7 @@ from blocks import (
     Attention,
     MultiHeadCrossAttention,
     Conv3DLayer,
+    DiffLayer,
     PatchEmbed3D,
     TimestepEmbedder,
     CaptionEmbedder,
@@ -109,6 +110,7 @@ class STDiTBlock(nn.Module):
         # temporal layer
         if temporal_layer_type == "conv3d":
             # similar to the Conv3D layers in Align your Latents paper
+            self.diff_layer = DiffLayer(dim=hidden_size)
             self.conv3d = Conv3DLayer(dim=hidden_size,
                                       inner_dim=256,
                                       enable_proj_out=True)
@@ -174,7 +176,7 @@ class STDiTBlock(nn.Module):
                             s=self.d_s)
             self.debugprint(x_t.shape)
 
-            if tpe is not None:
+            if tpe is not None and self.temporal_layer_type != "conv3d":
                 self.debugprint("tpe shape:", tpe.shape)
                 x_t = x_t + tpe
 
@@ -187,6 +189,7 @@ class STDiTBlock(nn.Module):
                                 s_h=self.d_s_h,
                                 s_w=self.d_s_w)
                 self.debugprint(x_t.shape)
+                x_t = self.diff_layer(x_t)
                 x_t = self.conv3d(x_t)
                 self.debugprint(x_t.shape)
                 x_t = rearrange(x_t, "b c t s_h s_w -> b (t s_h s_w) c")
