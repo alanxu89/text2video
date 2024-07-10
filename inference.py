@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import datetime
+import json
 
 import torch
 import torch.distributed as dist
@@ -146,6 +147,11 @@ def main():
     save_dir = os.path.join(cfg.save_dir,
                             datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
     os.makedirs(save_dir, exist_ok=True)
+
+    # save cfg
+    with open(os.path.join(save_dir, "config.json"), mode="w") as f:
+        f.write(json.dumps(cfg.__dict__, indent=2, sort_keys=False))
+
     for i in range(0, len(prompts), cfg.batch_size):
         batch_prompts = prompts[i:i + cfg.batch_size]
 
