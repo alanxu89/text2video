@@ -108,6 +108,7 @@ def main():
             hidden_size=cfg.hidden_size,
             num_heads=cfg.num_heads,
             patch_size=cfg.patch_size,
+            use_tpe_initially=cfg.use_tpe_initially,
             enable_temporal_attn=cfg.enable_temporal_attn,
             temporal_layer_type=cfg.temporal_layer_type,
             enable_mem_eff_attn=cfg.enable_mem_eff_attn,

@@ -149,6 +149,7 @@ class STDiTBlock(nn.Module):
          gate_mlp) = (self.scale_shift_table[None] +
                       t.reshape(B, 9, -1)).chunk(9, dim=1)
 
+        # modulate spatial
         x_m_s = modulate(self.norm_s(x), shift_msa_s, scale_msa_s)
 
         # spatial branch
@@ -167,6 +168,19 @@ class STDiTBlock(nn.Module):
 
         # temporal branch
         if self.enable_temporal_attn:
+            # optional temp emb
+            if tpe is not None and self.temporal_layer_type != "conv3d":
+                x = rearrange(x,
+                              "b (t s) c -> (b s) t c",
+                              t=self.d_t,
+                              s=self.d_s)
+                x = x + tpe
+                x = rearrange(x,
+                              "(b s) t c -> b (t s) c",
+                              t=self.d_t,
+                              s=self.d_s)
+
+            # modulate temporal
             x_m_t = modulate(self.norm_t(x), shift_msa_t, scale_msa_t)
 
             self.debugprint("temporal branch", x_m_t.shape)
@@ -175,10 +189,6 @@ class STDiTBlock(nn.Module):
                             t=self.d_t,
                             s=self.d_s)
             self.debugprint(x_t.shape)
-
-            if tpe is not None and self.temporal_layer_type != "conv3d":
-                self.debugprint("tpe shape:", tpe.shape)
-                x_t = x_t + tpe
 
             if self.temporal_layer_type == "conv3d":
                 self.debugprint("use conv3D")
@@ -249,12 +259,12 @@ class STDiT(nn.Module):
         class_dropout_prob=0.1,
         pred_sigma=True,
         drop_path=0.0,
-        no_temporal_pos_emb=False,
         caption_channels=4096,
         model_max_length=120,
         space_scale=1.0,
         time_scale=1.0,
         freeze=None,
+        use_tpe_initially=True,
         enable_temporal_attn=True,
         temporal_layer_type="conv3d",
         enable_mem_eff_attn=False,
@@ -285,6 +295,7 @@ class STDiT(nn.Module):
         self.num_patches = self.num_temporal * self.num_spatial
         self.num_heads = num_heads
         self.temporal_layer_type = temporal_layer_type
+        self.use_tpe_initially = use_tpe_initially
 
         self.space_scale = space_scale
         self.time_scale = time_scale
@@ -370,7 +381,7 @@ class STDiT(nn.Module):
         x = self.x_embedder(x)  # [B, Nt*Nh*Nw, C]
         self.debugprint(x.shape)
 
-        # prepare for spatial
+        # prepare for spatial emb
         x = rearrange(x,
                       "B (T S) C -> B T S C",
                       T=self.num_temporal,
@@ -379,6 +390,15 @@ class STDiT(nn.Module):
         x = x + self.pos_embed
         x = rearrange(x, "B T S C -> B (T S) C")
         self.debugprint(x.shape)
+
+        # prepare for temporal emb
+        if self.use_tpe_initially:
+            x = rearrange(x,
+                          "B (T S) C -> B S T C",
+                          T=self.num_temporal,
+                          S=self.num_spatial)
+            x = x + self.temporal_pos_embed
+            x = rearrange(x, "B S T C -> B (T S) C")
 
         self.debugprint("t shapes")
         self.debugprint(t.shape)
@@ -408,13 +428,14 @@ class STDiT(nn.Module):
             st_attn_bias = self.st_attn_bias.unsqueeze(0).repeat(
                 [bs, 1, 1, 1])  # [B, H, M, M]
 
+        tpe = None if self.use_tpe_initially else self.temporal_pos_embed
+
         for block in self.blocks:
             if self.enable_grad_checkpoint:
-                x = auto_grad_checkpoint(block, x, y, t0, y_lens,
-                                         self.temporal_pos_embed, st_attn_bias)
+                x = auto_grad_checkpoint(block, x, y, t0, y_lens, tpe,
+                                         st_attn_bias)
             else:
-                x = block(x, y, t0, y_lens, self.temporal_pos_embed,
-                          st_attn_bias)
+                x = block(x, y, t0, y_lens, tpe, st_attn_bias)
 
         self.debugprint("blocks out:", x.shape)
         # [N, num_patches, patch_size_nd * out_channels]
